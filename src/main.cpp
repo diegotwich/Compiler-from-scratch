@@ -5,6 +5,10 @@
 #include <memory>
 #include <string>
 #include "AST.h"
+#include "generator.h"
+#include <sstream>
+#include <fstream>
+#include <cstring>
 
 using namespace std;
 
@@ -24,10 +28,33 @@ int main(int argc, const char *argv[]) {
   auto ret = yyparse(ast);
   assert(!ret);
   // 输出
-  freopen(output, "w", stdout);
+  if (strcmp(mode, "-riscv") == 0) {
+	  freopen("KoopaOut.txt", "w", stdout);
 
-  // dump AST
-  ast->Dump();
-  cout << endl;
+	  // dump AST
+	  ast->Dump();
+	  cout << endl;
+
+	  // 将Koopa写入到str中
+	  string str;
+	  ifstream fin;
+	  fin.open("KoopaOut.txt", ios::in);
+	  stringstream buf;
+	  buf << fin.rdbuf();
+	  str = buf.str();
+	  fin.close();
+
+	  // 处理str
+	  freopen(output, "w", stdout);
+	  const char* tmp = str.c_str();
+	  parse_str(tmp);
+  }
+  else if (strcmp(mode, "-koopa") == 0) {
+	  freopen(output, "w", stdout);
+	  
+	  // dump AST
+	  ast->Dump();
+	  cout << endl;
+  }
   return 0;
 }
