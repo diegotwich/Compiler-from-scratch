@@ -49,7 +49,7 @@ AddExp    ::= MulExp | AddExp ("+" | "-") MulExp;
 
 // lexer返回的所有token类型
 %token INT RETURN
-%token <str_val> IDENT UnaryOp AddOp MulOp
+%token <str_val> IDENT
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
@@ -123,9 +123,19 @@ UnaryExp
 	  auto ast = new UnaryExpAST();
 	  ast->u_exp = unique_ptr<BaseAST>($1);
 	  $$ = ast;
-	} | UnaryOp UnaryExp {
+	} | '-' UnaryExp {
 	  auto ast = new UnaryExpAST();
-	  ast->unaryop = *($1);
+	  ast->unaryop = "-";
+	  ast->u_exp = unique_ptr<BaseAST>($2);
+	  $$ = ast;
+	} | '+' UnaryExp {
+	  auto ast = new UnaryExpAST();
+	  ast->unaryop = "+";
+	  ast->u_exp = unique_ptr<BaseAST>($2);
+	  $$ = ast;
+	} | '!' UnaryExp {
+	  auto ast = new UnaryExpAST();
+	  ast->unaryop = "!";
 	  ast->u_exp = unique_ptr<BaseAST>($2);
 	  $$ = ast;
 	}
@@ -136,26 +146,46 @@ MulExp
 	  auto ast = new MulExpAST();
 	  ast->u_exp = unique_ptr<BaseAST>($1);
 	  $$ = ast;
-	} | MulExp MulOp UnaryExp {
+	} | MulExp '*' UnaryExp {
 	  auto ast = new MulExpAST();
 	  ast->m_exp = unique_ptr<BaseAST>($1);
-	  ast->mulop = *($2);
+	  ast->mulop = "*";
+	  ast->u_exp = unique_ptr<BaseAST>($3);
+	  $$ = ast;
+	} | MulExp '/' UnaryExp {
+	  auto ast = new MulExpAST();
+	  ast->m_exp = unique_ptr<BaseAST>($1);
+	  ast->mulop = "/";
+	  ast->u_exp = unique_ptr<BaseAST>($3);
+	  $$ = ast;
+	} | MulExp '%' UnaryExp {
+	  auto ast = new MulExpAST();
+	  ast->m_exp = unique_ptr<BaseAST>($1);
+	  ast->mulop = "%";
 	  ast->u_exp = unique_ptr<BaseAST>($3);
 	  $$ = ast;
 	}
+	;
 
 AddExp
 	: MulExp {
 	  auto ast = new AddExpAST();
 	  ast->m_exp = unique_ptr<BaseAST>($1);
 	  $$ = ast;
-	} | AddExp AddOp MulExp {
+	} | AddExp '+' MulExp {
 	  auto ast = new AddExpAST();
 	  ast->a_exp = unique_ptr<BaseAST>($1);
-	  ast->addop = *($2);
+	  ast->addop = "+";
+	  ast->m_exp = unique_ptr<BaseAST>($3);
+	  $$ = ast;
+	} | AddExp '-' MulExp {
+	  auto ast = new AddExpAST();
+	  ast->a_exp = unique_ptr<BaseAST>($1);
+	  ast->addop = "-";
 	  ast->m_exp = unique_ptr<BaseAST>($3);
 	  $$ = ast;
 	}
+	;
 
 Number
 	: INT_CONST {

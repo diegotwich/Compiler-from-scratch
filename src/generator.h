@@ -86,13 +86,22 @@ void parse_str(const char* str) {
 					if (val.op == KOOPA_RBO_EQ) {
 						cout << "  xor   " << "a" << now << ", " << l << ", " << r << endl;
 						cout << "  seqz  " << "a" << now << ", " << "a" << now << endl;
-						
+
 					}
 					else if (val.op == KOOPA_RBO_SUB) {
 						cout << "  sub   " << "a" << now << ", " << l << ", " << r << endl;
 					}
 					else if (val.op == KOOPA_RBO_ADD) {
 						cout << "  add   " << "a" << now << ", " << l << ", " << r << endl;
+					}
+					else if (val.op == KOOPA_RBO_MUL) {
+						cout << "  mul   " << "a" << now << ", " << l << ", " << r << endl;
+					}
+					else if (val.op == KOOPA_RBO_DIV) {
+						cout << "  div   " << "a" << now << ", " << l << ", " << r << endl;
+					}
+					else if (val.op == KOOPA_RBO_MOD) {
+						cout << "  mod   " << "a" << now << ", " << l << ", " << r << endl;
 					}
 					char tt[3];
 					tt[0] = 'a', tt[1] = now + '0', tt[2] = '\0';

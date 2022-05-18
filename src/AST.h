@@ -76,8 +76,13 @@ public:
 		// std::cout << "Stmt { ";
 		// number->Dump();
 		// std::cout << " }";
-		exp->Dump();
-		std::cout << "  ret %" << now - 1 << std::endl << "}";
+		int ret = exp->Dump();
+		if (ret == -1) {
+			std::cout << "  ret %" << now - 1 << std::endl << "}";
+		}
+		else {
+			std::cout << "  ret " << ret << std::endl << "}";
+		}
 		return -1;
 	}
 };
@@ -87,8 +92,7 @@ public:
 	std::unique_ptr<BaseAST> addexp;
 
 	int Dump() const override {
-		addexp->Dump();
-		return -1;
+		return addexp->Dump();
 	}
 };
 
@@ -141,20 +145,20 @@ public:
 	int Dump() const override {
 		char tmp = mulop[0];
 		if (tmp == '*' || tmp == '/' || tmp == '%') {
-			std::cout << " %" << now << " = ";
-			if (tmp == '*') {
-				std::cout << "mul ";
-			}
-			else if (tmp == '/') {
-				std::cout << "div ";
-			}
-			else {
-				std::cout << "mod ";
-			}
 			int mret = m_exp->Dump();
 			if (mret == -1) {
 				int tnow = now - 1;
 				int uret = u_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (tmp == '*') {
+					std::cout << "mul ";
+				}
+				else if (tmp == '/') {
+					std::cout << "div ";
+				}
+				else {
+					std::cout << "mod ";
+				}
 				if (uret == -1) {
 					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
 				}
@@ -164,6 +168,16 @@ public:
 			}
 			else {
 				int uret = u_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (tmp == '*') {
+					std::cout << "mul ";
+				}
+				else if (tmp == '/') {
+					std::cout << "div ";
+				}
+				else {
+					std::cout << "mod ";
+				}
 				if (uret == -1) {
 					std::cout << mret << ", %" << now - 1 << std::endl;
 				}
@@ -186,19 +200,19 @@ public:
 	int Dump() const override {
 		char tmp = addop[0];
 		if (tmp == '+' || tmp == '-') {
-			std::cout << "  %" << now << " = ";
-			if (tmp == '+') {
-				std::cout << "add ";
-			}
-			else {
-				std::cout << "sub ";
-			}
 			int aret = a_exp->Dump();
 			if (aret == -1) {
 				int tnow = now - 1;
 				int mret = m_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (tmp == '+') {
+					std::cout << "add ";
+				}
+				else {
+					std::cout << "sub ";
+				}
 				if (mret == -1) {
-					std::cout <<"%"	<< tnow << ", %" << now - 1 << std::endl;
+					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
 				}
 				else {
 					std::cout << "%" << tnow << ", " << mret << std::endl;
@@ -206,6 +220,13 @@ public:
 			}
 			else {
 				int mret = m_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (tmp == '+') {
+					std::cout << "add ";
+				}
+				else {
+					std::cout << "sub ";
+				}
 				if (mret == -1) {
 					std::cout << aret << ", %" << now - 1 << std::endl;
 				}
