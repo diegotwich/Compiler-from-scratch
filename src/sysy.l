@@ -26,6 +26,11 @@ Decimal			[1-9][0-9]*
 Octal			0[0-7]*
 Hexadecimal		0[xX][0-9a-fA-F]+
 
+/* 运算符 */
+UnaryOp			"+"|"-"|"!"	 
+AddOp			"+"|"-"
+MulOp			"*"|"/"|"%"
+
 %%
 
 {WhiteSpace}	{ /* 不做任何操作 */ }
@@ -40,6 +45,10 @@ Hexadecimal		0[xX][0-9a-fA-F]+
 {Decimal}       { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
 {Octal}         { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
 {Hexadecimal}   { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
+
+{UnaryOp}			{ yylval.str_val = new string(yytext); return UnaryOp; }
+{AddOp}				{ yylval.str_val = new string(yytext); return AddOp; }
+{MulOp}				{ yylval.str_val = new string(yytext); return MulOp; }
 
 .				{ return yytext[0]; }
 

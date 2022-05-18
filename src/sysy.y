@@ -18,6 +18,24 @@ using namespace std;
 
 %}
 
+/*
+因为容易忘记所有的语法，所以记录在这里
+CompUnit  ::= FuncDef;
+
+FuncDef   ::= FuncType IDENT "(" ")" Block;
+FuncType  ::= "int";
+
+Block     ::= "{" Stmt "}";
+Stmt      ::= "return" Exp ";";
+Exp		  ::= AddExp;
+PrimaryExp::= "(" Exp ")" | Number;
+Number    ::= INT_CONST;
+UnaryExp  ::= PrimaryExp | UnaryOp UnaryExp;
+UnaryOp   ::= "+" | "-" | "|";
+MulExp    ::= UnaryExp | MulExp ("*" | "/" | "%") UnaryExp;
+AddExp    ::= MulExp | AddExp ("+" | "-") MulExp;
+*/
+
 // 定义 parser 函数和错误处理函数的附加参数
 %parse-param { std::unique_ptr<BaseAST> &ast }
 
@@ -31,11 +49,11 @@ using namespace std;
 
 // lexer返回的所有token类型
 %token INT RETURN
-%token <str_val> IDENT
+%token <str_val> IDENT UnaryOp AddOp MulOp
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt Number
+%type <ast_val> FuncDef FuncType Block Stmt Number Exp PrimaryExp UnaryExp AddExp MulExp
 
 %%
 
@@ -60,8 +78,6 @@ FuncDef
 FuncType
 	: INT {
 	  auto ast = new FuncTypeAST();
-	  string tmp("int");
-	  ast->INT = tmp;
 	  $$ = ast;
 	}
 	;
@@ -75,12 +91,71 @@ Block
 	;
 
 Stmt
-	: RETURN Number ';' {
+	: RETURN Exp ';' {
 	  auto ast = new StmtAST();
-	  ast->number = unique_ptr<BaseAST>($2);
+	  ast->exp = unique_ptr<BaseAST>($2);
 	  $$ = ast;
 	}
 	;
+	
+Exp
+	: AddExp {
+	  auto ast = new ExpAST();
+	  ast->addexp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	}
+	;
+
+PrimaryExp
+	: '(' Exp ')' {
+	  auto ast = new PrimaryExpAST();
+	  ast->p_exp = unique_ptr<BaseAST>($2);
+	  $$ = ast;
+	} | Number {
+	  auto ast = new PrimaryExpAST();
+	  ast -> p_exp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	}
+	;
+
+UnaryExp
+	: PrimaryExp {
+	  auto ast = new UnaryExpAST();
+	  ast->u_exp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | UnaryOp UnaryExp {
+	  auto ast = new UnaryExpAST();
+	  ast->unaryop = *($1);
+	  ast->u_exp = unique_ptr<BaseAST>($2);
+	  $$ = ast;
+	}
+	;
+
+MulExp
+	: UnaryExp {
+	  auto ast = new MulExpAST();
+	  ast->u_exp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | MulExp MulOp UnaryExp {
+	  auto ast = new MulExpAST();
+	  ast->m_exp = unique_ptr<BaseAST>($1);
+	  ast->mulop = *($2);
+	  ast->u_exp = unique_ptr<BaseAST>($3);
+	  $$ = ast;
+	}
+
+AddExp
+	: MulExp {
+	  auto ast = new AddExpAST();
+	  ast->m_exp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | AddExp AddOp MulExp {
+	  auto ast = new AddExpAST();
+	  ast->a_exp = unique_ptr<BaseAST>($1);
+	  ast->addop = *($2);
+	  ast->m_exp = unique_ptr<BaseAST>($3);
+	  $$ = ast;
+	}
 
 Number
 	: INT_CONST {
