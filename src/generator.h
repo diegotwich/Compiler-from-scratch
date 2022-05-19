@@ -22,6 +22,19 @@ inline char* regfind(int* addr) {
 	}
 	return "error";
 }
+
+static char c[3];
+
+inline char* getReg(int num) {
+	if (num <= 7) {
+		c[0] = 'a', c[1] = num + '0', c[2] = '\0';
+	}
+	else {
+		num -= 8;
+		c[0] = 't', c[1] = num + '0', c[2] = '\0';
+	}
+	return c;
+}
 void parse_str(const char* str) {
 	// 解析字符串 str, 得到 Koopa IR 程序
 	int now = 0;
@@ -56,14 +69,15 @@ void parse_str(const char* str) {
 				// 二元运算
 				if (value->kind.tag == KOOPA_RVT_BINARY) {
 					koopa_raw_binary_t val = value->kind.data.binary;
-					char tmp = now + '0', l[3], r[3];
+					int tmp = now;
+					char l[3], r[3];
 					l[2] = r[2] = '\0';
 					if (val.lhs->kind.tag == KOOPA_RVT_INTEGER && val.lhs->kind.data.integer.value == 0) {
 						l[0] = 'x', l[1] = '0';
 					}
 					else if (val.lhs->kind.tag == KOOPA_RVT_INTEGER) {
-						cout << "  li    " << "a" << tmp << ", " << val.lhs->kind.data.integer.value << endl;
-						l[0] = 'a', l[1] = tmp;
+						strcpy(l, getReg(tmp));
+						cout << "  li    " << l << ", " << val.lhs->kind.data.integer.value << endl;
 						tmp++;
 					}
 					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY) {
@@ -75,8 +89,8 @@ void parse_str(const char* str) {
 						r[0] = 'x', r[1] = '0';
 					}
 					else if (val.rhs->kind.tag == KOOPA_RVT_INTEGER) {
-						cout << "  li    " << "a" << tmp << ", " << val.rhs->kind.data.integer.value << endl;
-						r[0] = 'a', r[1] = tmp;
+						strcpy(r, getReg(tmp));
+						cout << "  li    " << r << ", " << val.rhs->kind.data.integer.value << endl;
 					}
 					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY) {
 						char* t = regfind((int*)val.rhs);
@@ -84,27 +98,51 @@ void parse_str(const char* str) {
 						r[0] = t[0], r[1] = t[1];
 					}
 					if (val.op == KOOPA_RBO_EQ) {
-						cout << "  xor   " << "a" << now << ", " << l << ", " << r << endl;
-						cout << "  seqz  " << "a" << now << ", " << "a" << now << endl;
+						cout << "  xor   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  seqz  " << getReg(now) << ", " << getReg(now) << endl;
 
 					}
 					else if (val.op == KOOPA_RBO_SUB) {
-						cout << "  sub   " << "a" << now << ", " << l << ", " << r << endl;
+						cout << "  sub   " << getReg(now) << ", " << l << ", " << r << endl;
 					}
 					else if (val.op == KOOPA_RBO_ADD) {
-						cout << "  add   " << "a" << now << ", " << l << ", " << r << endl;
+						cout << "  add   " << getReg(now) << ", " << l << ", " << r << endl;
 					}
 					else if (val.op == KOOPA_RBO_MUL) {
-						cout << "  mul   " << "a" << now << ", " << l << ", " << r << endl;
+						cout << "  mul   " << getReg(now) << ", " << l << ", " << r << endl;
 					}
 					else if (val.op == KOOPA_RBO_DIV) {
-						cout << "  div   " << "a" << now << ", " << l << ", " << r << endl;
+						cout << "  div   " << getReg(now) << ", " << l << ", " << r << endl;
 					}
 					else if (val.op == KOOPA_RBO_MOD) {
-						cout << "  mod   " << "a" << now << ", " << l << ", " << r << endl;
+						cout << "  rem   " << getReg(now) << ", " << l << ", " << r << endl;
+					}
+					else if (val.op == KOOPA_RBO_NOT_EQ) {
+						cout << "  xor   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  snez  " << getReg(now) << ", " << getReg(now) << endl;
+					}
+					else if (val.op == KOOPA_RBO_GT) {
+						cout << "  sgt   " << getReg(now) << ", " << l << ", " << r << endl;
+					}
+					else if (val.op == KOOPA_RBO_LT) {
+						cout << "  slt   " << getReg(now) << ", " << l << ", " << r << endl;
+					}
+					else if (val.op == KOOPA_RBO_GE) {
+						cout << "  slt   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  seqz  " << getReg(now) << ", " << getReg(now) << endl;
+					}
+					else if (val.op == KOOPA_RBO_LE) {
+						cout << "  sgt   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  seqz  " << getReg(now) << ", " << getReg(now) << endl;
+					}
+					else if (val.op == KOOPA_RBO_AND) {
+						cout << "  and   " << getReg(now) << ", " << l << ", " << r << endl;
+					}
+					else if (val.op == KOOPA_RBO_OR) {
+						cout << "  or    " << getReg(now) << ", " << l << ", " << r << endl;
 					}
 					char tt[3];
-					tt[0] = 'a', tt[1] = now + '0', tt[2] = '\0';
+					strcpy(tt, getReg(now));
 					strcpy(Reg[now].name, tt);
 					Reg[now].address = (int*)value;
 					now++;
@@ -115,7 +153,13 @@ void parse_str(const char* str) {
 						cout << "  li    " << "a0, " << ret_value->kind.data.integer.value << endl << "  ret" << endl;
 					}
 					else if (ret_value->kind.tag == KOOPA_RVT_BINARY) {
-						cout << "  mv    " << "a0, " << regfind((int*)ret_value) << endl << "  ret" << endl;
+						string retreg = regfind((int*)ret_value);
+						if (retreg!="a0") {
+							cout << "  mv    " << "a0, " << regfind((int*)ret_value) << endl << "  ret" << endl;
+						}
+						else {
+							cout << "  ret" << endl;
+						}
 					}
 				}
 			}

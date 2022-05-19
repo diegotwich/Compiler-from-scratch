@@ -27,6 +27,10 @@ Octal			0[0-7]*
 Hexadecimal		0[xX][0-9a-fA-F]+
 
 /* ÔËËã·û */
+RelOp			[<|>]=?
+EqOp			[=|!]=
+AndOp			&&
+OrOp			\|\|
 
 %%
 
@@ -43,6 +47,10 @@ Hexadecimal		0[xX][0-9a-fA-F]+
 {Octal}         { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
 {Hexadecimal}   { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
 
+{RelOp}			{ yylval.str_val = new string(yytext); return RelOp;}
+{EqOp}			{ yylval.str_val = new string(yytext); return EqOp;}
+{AndOp}			{ yylval.str_val = new string(yytext); return AndOp;}
+{OrOp}			{ yylval.str_val = new string(yytext); return OrOp;}
 
 .				{ return yytext[0]; }
 

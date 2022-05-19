@@ -89,10 +89,10 @@ public:
 
 class ExpAST : public BaseAST {
 public:
-	std::unique_ptr<BaseAST> addexp;
+	std::unique_ptr<BaseAST> lorexp;
 
 	int Dump() const override {
-		return addexp->Dump();
+		return lorexp->Dump();
 	}
 };
 
@@ -238,6 +238,196 @@ public:
 			return -1;
 		}
 		return m_exp->Dump();
+	}
+};
+
+class RelExpAST : public BaseAST {
+public:
+	std::string relop;
+	std::unique_ptr<BaseAST> a_exp;
+	std::unique_ptr<BaseAST> r_exp;
+	int Dump() const override {
+		if (relop == ">" || relop == "<" || relop == ">=" || relop == "<=") {
+			int rret = r_exp->Dump();
+			if (rret == -1) {
+				int tnow = now - 1;
+				int aret = a_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (relop == ">") {
+					std::cout << "gt ";
+				}
+				else if (relop == "<") {
+					std::cout << "lt ";
+				}
+				else if (relop == ">=") {
+					std::cout << "ge ";
+				}
+				else if (relop == "<=") {
+					std::cout << "le ";
+				}
+				if (aret == -1) {
+					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
+				}
+				else {
+					std::cout << "%" << tnow << ", " << aret << std::endl;
+				}
+			}
+			else {
+				int aret = a_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (relop == ">") {
+					std::cout << "gt ";
+				}
+				else if (relop == "<") {
+					std::cout << "lt ";
+				}
+				else if (relop == ">=") {
+					std::cout << "ge ";
+				}
+				else if (relop == "<=") {
+					std::cout << "le ";
+				}
+				if (aret == -1) {
+					std::cout << rret << ", %" << now - 1 << std::endl;
+				}
+				else {
+					std::cout << rret << ", " << aret << std::endl;
+				}
+			}
+			now++;
+			return -1;
+		}
+		return a_exp->Dump();
+	}
+};
+
+class EqExpAST : public BaseAST {
+public:
+	std::string eqop;
+	std::unique_ptr<BaseAST> r_exp;
+	std::unique_ptr<BaseAST> e_exp;
+	int Dump() const override {
+		if (eqop == "==" || eqop == "!=") {
+			int eret = e_exp->Dump();
+			if (eret == -1) {
+				int tnow = now - 1;
+				int rret = r_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (eqop == "==") {
+					std::cout << "eq ";
+				}
+				else if (eqop == "!=") {
+					std::cout << "ne ";
+				}
+				if (rret == -1) {
+					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
+				}
+				else {
+					std::cout << "%" << tnow << ", " << rret << std::endl;
+				}
+			}
+			else {
+				int rret = r_exp->Dump();
+				std::cout << "  %" << now << " = ";
+				if (eqop == "==") {
+					std::cout << "eq ";
+				}
+				else if (eqop == "!=") {
+					std::cout << "ne ";
+				}
+				if (rret == -1) {
+					std::cout << eret << ", %" << now - 1 << std::endl;
+				}
+				else {
+					std::cout << eret << ", " << rret << std::endl;
+				}
+			}
+			now++;
+			return -1;
+		}
+		return r_exp->Dump();
+	}
+};
+
+class LAndExpAST : public BaseAST {
+public:
+	std::string andop;
+	std::unique_ptr<BaseAST> e_exp;
+	std::unique_ptr<BaseAST> la_exp;
+	int Dump() const override {
+		if (andop == "&&") {
+			int laret = la_exp->Dump();
+			if (laret == -1) {
+				int tnow = now - 1;
+				int eret = e_exp->Dump();
+				std::cout << "  %" << now << " = ne 0, %" << tnow << std::endl;
+				now++;
+				if (eret == -1) {
+					std::cout << "  %" << now << " = ne 0, %" << now - 2 << std::endl;
+				}
+				else {
+					std::cout << "  %" << now << " = ne 0, " << eret << std::endl;
+				}
+				now++;
+				std::cout << "  %" << now << " = and %" << now - 1 << ", %" << now - 2 << std::endl;
+			}
+			else {
+				int eret = e_exp->Dump();
+				std::cout << "  %" << now << " = ne 0, " << laret << std::endl;
+				now++;
+				if (eret == -1) {
+					std::cout << "  %" << now << " = ne 0, %" << now - 2 << std::endl;
+				}
+				else {
+					std::cout << "  %" << now << " = ne 0, " << eret << std::endl;
+				}
+				now++;
+				std::cout << "  %" << now << " = and %" << now - 1 << ", %" << now - 2 << std::endl;
+			}
+			now++;
+			return -1;
+		}
+		return e_exp->Dump();
+	}
+};
+
+class LOrExpAST : public BaseAST {
+public:
+	std::string orop;
+	std::unique_ptr<BaseAST> la_exp;
+	std::unique_ptr<BaseAST> lo_exp;
+	int Dump() const override {
+		if (orop == "||") {
+			int loret = lo_exp->Dump();
+			if (loret == -1) {
+				int tnow = now - 1;
+				int laret = la_exp->Dump();
+				std::cout << "  %" << now << " = or ";
+				if (laret == -1) {
+					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
+				}
+				else {
+					std::cout << "%" << tnow << ", " << laret << std::endl;
+				}
+				now++;
+				std::cout << "  %" << now << " = ne %" << now - 1 << ", 0" << std::endl;
+			}
+			else {
+				int laret = la_exp->Dump();
+				std::cout << "  %" << now << " = or ";
+				if (laret == -1) {
+					std::cout << loret << ", %" << now - 1 << std::endl;
+				}
+				else {
+					std::cout << loret << ", " << laret << std::endl;
+				}
+				now++;
+				std::cout << "  %" << now << " = ne %" << now - 1 << ", 0" << std::endl;
+			}
+			now++;
+			return -1;
+		}
+		return la_exp->Dump();
 	}
 };
 
