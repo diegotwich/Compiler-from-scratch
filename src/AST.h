@@ -11,6 +11,8 @@ static int now = 0;
 typedef struct {
 	std::string name;
 	int value, status;
+	// status = 0为变量，=1为常量
+	bool init;
 }Symbol;
 
 struct SymbolList{
@@ -20,19 +22,18 @@ struct SymbolList{
 
 static SymbolList* list = NULL;
 
-inline int FindSymbolValue(std::string s) {
+inline SymbolList* FindSymbolValue(std::string s) {
 	SymbolList* tmp = list;
 	while (tmp != NULL) {
 		if (tmp->sym.name == s) {
-			return tmp->sym.value;
+			return tmp;
 		}
 		tmp = tmp->next;
 	}
-	assert(tmp == NULL);
-	return -1;
+	assert(tmp != NULL);
 }
 
-inline Symbol InsertSymbol(std::string s, int value, int status) {
+inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
 	SymbolList* p = list;
 	if (list == NULL) {
 		list = new SymbolList;
@@ -40,6 +41,7 @@ inline Symbol InsertSymbol(std::string s, int value, int status) {
 		list->sym.name = s;
 		list->sym.value = value;
 		list->sym.status = status;
+		list->sym.init = init;
 		return list->sym;
 	}
 	while (p->next != NULL) p = p->next;
@@ -48,6 +50,7 @@ inline Symbol InsertSymbol(std::string s, int value, int status) {
 	tmp->sym.name = s;
 	tmp->sym.value = value;
 	tmp->sym.status = status;
+	tmp->sym.init = init;
 	p->next = tmp;
 	return tmp->sym;
 }
@@ -59,6 +62,8 @@ public:
 	virtual int Dump() const = 0;
 
 	virtual int Calc() const = 0;
+
+	virtual SymbolList* FindSym() const = 0;
 };
 
 class CompUnitAST : public BaseAST {
@@ -76,20 +81,28 @@ public:
 		
 		return -1;
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class DeclAST : public BaseAST {
 public:
-	std::unique_ptr<BaseAST> const_decl;
+	std::unique_ptr<BaseAST> decl;
 
 	int Dump() const override {
-		const_decl->Dump();
+		decl->Dump();
 		return -1;
 	}
 
 	int Calc() const override {
 		
 		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -108,6 +121,10 @@ public:
 
 		return -1;
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class BTypeAST : public BaseAST {
@@ -120,6 +137,10 @@ public:
 	int Calc() const override {
 
 		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -139,6 +160,10 @@ public:
 
 		return -1;
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class ConstDefAST : public BaseAST {
@@ -147,12 +172,16 @@ public:
 	std::unique_ptr<BaseAST> const_init_val;
 	int Dump() const override {
 		auto val = const_init_val->Calc();
-		InsertSymbol(name, val, 1);
+		InsertSymbol(name, val, 1, 1);
 		return -1;
 	}
 	int Calc() const override {
 
 		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -165,6 +194,98 @@ public:
 	}
 	int Calc() const override {
 		return const_exp->Calc();
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class VarDeclAST : public BaseAST {
+public:
+	std::unique_ptr<BaseAST> btype;
+	std::unique_ptr<BaseAST> var_def;
+	std::unique_ptr<BaseAST> var_defs;
+	int Dump() const override {
+		btype->Dump();
+		var_def->Dump();
+		var_defs->Dump();
+		return -1;
+	}
+	int Calc() const override {
+		
+		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class VarDefsAST : public BaseAST {
+public:
+	bool exist = 1;
+	std::unique_ptr<BaseAST> var_def;
+	std::unique_ptr<BaseAST> var_defs;
+	int Dump() const override {
+		if (exist) {
+			var_def->Dump();
+			var_defs->Dump();
+		}
+		return -1;
+	}
+	int Calc() const override {
+
+		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class VarDefAST : public BaseAST {
+public:
+	bool initialized = 1; //是否初始化
+	std::string name;
+	std::unique_ptr<BaseAST> init_val;
+	int Dump() const override {
+		auto val = initialized ? init_val->Calc() : 0;
+		InsertSymbol(name, val, 0, initialized);
+		std::cout << "  @" << name << " = alloc i32" << std::endl;
+		if (initialized) {
+			int ret = init_val->Dump();
+			if (ret == -1) {
+				std::cout << "  store %" << now - 1 << ", @" << name << std::endl;
+			}
+			else {
+				std::cout << "  store " << ret << ", @" << name << std::endl;
+			}
+		}
+		return -1;
+	}
+	int Calc() const override {
+
+		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class InitValAST : public BaseAST {
+public:
+	std::unique_ptr<BaseAST> exp;
+	int Dump() const override {
+		return exp->Dump();
+	}
+	int Calc() const override {
+		return exp->Calc();
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -190,6 +311,10 @@ public:
 
 		return -1;
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class FuncTypeAST : public BaseAST {
@@ -204,6 +329,10 @@ public:
 	int Calc() const override {
 		
 		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -224,6 +353,10 @@ public:
 
 		return -1;
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class BlockItemsAST : public BaseAST {
@@ -243,6 +376,10 @@ public:
 		
 		return -1;
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class BlockItemAST : public BaseAST {
@@ -256,22 +393,65 @@ public:
 		
 		return -1;
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class LValAST : public BaseAST {
+public:
+	std::string name;
+	int Dump() const override {
+		SymbolList* tmp = FindSymbolValue(name);
+		if (tmp->sym.status == 1) {
+			return tmp->sym.value;
+		}
+		else {
+			std::cout << "  %" << now << " = load @" << tmp->sym.name << std::endl;
+			now++;
+			return -1;
+		}
+	}
+	int Calc() const override {
+		return FindSymbolValue(name)->sym.value;
+	}
+	SymbolList* FindSym() const override {
+		return FindSymbolValue(name);
+	}
 };
 
 class StmtAST : public BaseAST {
 public:
+	int type;
+	std::unique_ptr<BaseAST> l_val;
 	std::unique_ptr<BaseAST> exp;
 	
 	int Dump() const override {
 		// std::cout << "Stmt { ";
 		// number->Dump();
 		// std::cout << " }";
-		int ret = exp->Dump();
-		if (ret == -1) {
-			std::cout << "  ret %" << now - 1 << std::endl << "}";
+		if (type == 1) { // RETURN
+			int ret = exp->Dump();
+			if (ret == -1) {
+				std::cout << "  ret %" << now - 1 << std::endl << "}";
+			}
+			else {
+				std::cout << "  ret " << ret << std::endl << "}";
+			}
 		}
-		else {
-			std::cout << "  ret " << ret << std::endl << "}";
+		else if (type == 0) { // LVal = Exp
+			SymbolList* tmp = l_val->FindSym();
+			assert(tmp->sym.status == 0); // 向常量赋值则错误
+			int ret = exp->Dump();
+			if (ret == -1) {
+				std::cout << "  store %" << now - 1 << ", @" << tmp->sym.name << std::endl;
+			}
+			else {
+				std::cout << "  store " << ret << ", @" << tmp->sym.name << std::endl;
+			}
+			tmp->sym.value = exp->Calc();
+			tmp->sym.init = 1;
 		}
 		return -1;
 	}
@@ -279,6 +459,10 @@ public:
 	int Calc() const override {
 
 		return -1;
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -293,16 +477,9 @@ public:
 	int Calc() const override {
 		return lorexp->Calc();
 	}
-};
+	SymbolList* FindSym() const override{
 
-class LValAST : public BaseAST {
-public:
-	std::string name;
-	int Dump() const override {
-		return FindSymbolValue(name);
-	}
-	int Calc() const override {
-		return FindSymbolValue(name);
+		return NULL;
 	}
 };
 
@@ -315,6 +492,10 @@ public:
 
 	int Calc() const override {
 		return p_exp->Calc();
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -358,6 +539,10 @@ public:
 			return !u_exp->Calc();
 		}
 		return u_exp->Calc();
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -427,6 +612,10 @@ public:
 		}
 		return u_exp->Calc();
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class AddExpAST : public BaseAST {
@@ -485,6 +674,10 @@ public:
 			return a_exp->Calc() - m_exp->Calc();
 		}
 		return m_exp->Calc();
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -562,6 +755,10 @@ public:
 		}
 		return a_exp->Calc();
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class EqExpAST : public BaseAST {
@@ -620,6 +817,10 @@ public:
 		}
 		return r_exp->Calc();
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class LAndExpAST : public BaseAST {
@@ -669,6 +870,10 @@ public:
 		}
 		return e_exp->Calc();
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class LOrExpAST : public BaseAST {
@@ -716,6 +921,10 @@ public:
 		}
 		return la_exp->Calc();
 	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
 };
 
 class ConstExpAST : public BaseAST {
@@ -728,6 +937,10 @@ public:
 
 	int Calc() const override {
 		return c_exp->Calc();
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };
 
@@ -742,5 +955,9 @@ public:
 
 	int Calc() const override {
 		return atoi(IntConst.c_str());
+	}
+	SymbolList* FindSym() const override{
+
+		return NULL;
 	}
 };

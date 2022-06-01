@@ -9,10 +9,17 @@
 using namespace std;
 
 typedef struct {
-	char name[3];
+	// char name[3];
+	int val;
 	int* address;
 }InstrLoc;
 
+struct InstrLocList {
+	InstrLoc loc;
+	InstrLocList* next;
+};
+InstrLocList* List;
+/*
 InstrLoc Reg[15]; // 前8个为a，后7个为t
 inline char* regfind(int* addr) {
 	for (int i = 0; i < 15; i++) {
@@ -35,6 +42,40 @@ inline char* getReg(int num) {
 	}
 	return c;
 }
+*/
+int LocFind(int* addr) {
+	InstrLocList* tmp = List;
+	while (tmp != NULL) {
+		if (tmp->loc.address == addr) {
+			return tmp->loc.val;
+		}
+		tmp = tmp->next;
+	}
+	return -1;
+}
+
+InstrLocList* LocInsert(int* addr, int val) {
+	if (List == NULL) {
+		List = new InstrLocList;
+		List->loc.address = addr;
+		List->loc.val = val;
+		List->next = NULL;
+		return List;
+	}
+	else {
+		InstrLocList* tmp = List;
+		while (tmp->next != NULL) {
+			tmp = tmp->next;
+		}
+		InstrLocList* p = new InstrLocList;
+		p->loc.address = addr;
+		p->loc.val = val;
+		p->next = NULL;
+		tmp->next = p;
+		return p;
+	}
+}
+
 void parse_str(const char* str) {
 	// 解析字符串 str, 得到 Koopa IR 程序
 	int now = 0;
@@ -59,6 +100,25 @@ void parse_str(const char* str) {
 		koopa_raw_function_t func = (koopa_raw_function_t)raw.funcs.buffer[i];
 		cout << "  .global " << func->name + 1 << endl;
 		cout << func->name + 1 << ":" << endl;
+		// 遍历函数，计算出偏移量
+		int offset = 0;
+		for (size_t j = 0; j < func->bbs.len; ++j) {
+			assert(func->bbs.kind == KOOPA_RSIK_BASIC_BLOCK);
+			koopa_raw_basic_block_t bb = (koopa_raw_basic_block_t)func->bbs.buffer[j];
+			for (size_t k = 0; k < bb->insts.len; ++k) {
+				koopa_raw_value_t value = (koopa_raw_value_t)bb->insts.buffer[k];
+				if (value->ty->tag == KOOPA_RTT_UNIT) continue;
+				offset += 4;
+			}
+		}
+		if (offset % 16 != 0) offset = offset / 16 * 16 + 16; //对齐
+		if (offset > 2048) {
+			cout << "  li    t0, " << -offset << endl;
+			cout << "  add   sp, sp, t0" << endl;
+		}
+		else {
+			cout << "  addi  sp, sp, " << -offset << endl;
+		}
 		// 进一步处理当前函数
 		for (size_t j = 0; j < func->bbs.len; ++j) {
 			assert(func->bbs.kind == KOOPA_RSIK_BASIC_BLOCK);
@@ -69,103 +129,361 @@ void parse_str(const char* str) {
 				// 二元运算
 				if (value->kind.tag == KOOPA_RVT_BINARY) {
 					koopa_raw_binary_t val = value->kind.data.binary;
-					int tmp = now;
 					char l[3], r[3];
 					l[2] = r[2] = '\0';
 					if (val.lhs->kind.tag == KOOPA_RVT_INTEGER && val.lhs->kind.data.integer.value == 0) {
 						l[0] = 'x', l[1] = '0';
 					}
 					else if (val.lhs->kind.tag == KOOPA_RVT_INTEGER) {
-						strcpy(l, getReg(tmp));
+						l[0] = 't', l[1] = '0';
 						cout << "  li    " << l << ", " << val.lhs->kind.data.integer.value << endl;
-						tmp++;
 					}
-					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY) {
-						char* t = regfind((int*)val.lhs);
-						assert(strcmp(t, "error"));
-						l[0] = t[0], l[1] = t[1];
+					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY || val.lhs->kind.tag == KOOPA_RVT_LOAD || val.lhs->kind.tag == KOOPA_RVT_ALLOC) {
+						int loc = LocFind((int*)val.lhs);
+						assert(loc >= 0);
+						if (loc < 2048) {
+							cout << "  lw    t0, " << loc << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << loc << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  lw    t0, a0" << endl;
+						}
+						l[0] = 't', l[1] = '0';
 					}
 					if (val.rhs->kind.tag == KOOPA_RVT_INTEGER && val.rhs->kind.data.integer.value == 0) {
 						r[0] = 'x', r[1] = '0';
 					}
 					else if (val.rhs->kind.tag == KOOPA_RVT_INTEGER) {
-						strcpy(r, getReg(tmp));
+						r[0] = 't', r[1] = '1';
 						cout << "  li    " << r << ", " << val.rhs->kind.data.integer.value << endl;
 					}
-					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY) {
-						char* t = regfind((int*)val.rhs);
-						assert(strcmp(t, "error"));
-						r[0] = t[0], r[1] = t[1];
+					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY || val.rhs->kind.tag == KOOPA_RVT_LOAD || val.rhs->kind.tag == KOOPA_RVT_ALLOC) {
+						int loc = LocFind((int*)val.rhs);
+						assert(loc >= 0);
+						if (loc < 2048) {
+							cout << "  lw    t1, " << loc << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << loc << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  lw    t1, a0" << endl;
+						}
+						r[0] = 't', r[1] = '1';
 					}
 					if (val.op == KOOPA_RBO_EQ) {
-						cout << "  xor   " << getReg(now) << ", " << l << ", " << r << endl;
-						cout << "  seqz  " << getReg(now) << ", " << getReg(now) << endl;
-
+						cout << "  xor   t0" << ", " << l << ", " << r << endl;
+						cout << "  seqz  t0, t0" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_SUB) {
-						cout << "  sub   " << getReg(now) << ", " << l << ", " << r << endl;
+						//cout << "  sub   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  sub   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_ADD) {
-						cout << "  add   " << getReg(now) << ", " << l << ", " << r << endl;
+						//cout << "  add   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  add   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_MUL) {
-						cout << "  mul   " << getReg(now) << ", " << l << ", " << r << endl;
+						//cout << "  mul   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  mul   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_DIV) {
-						cout << "  div   " << getReg(now) << ", " << l << ", " << r << endl;
+						//cout << "  div   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  div   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_MOD) {
-						cout << "  rem   " << getReg(now) << ", " << l << ", " << r << endl;
+						//cout << "  rem   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  rem   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_NOT_EQ) {
-						cout << "  xor   " << getReg(now) << ", " << l << ", " << r << endl;
-						cout << "  snez  " << getReg(now) << ", " << getReg(now) << endl;
+						cout << "  xor   t0, " << l << ", " << r << endl;
+						cout << "  snez  t0, t0" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_GT) {
-						cout << "  sgt   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  sgt   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_LT) {
-						cout << "  slt   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  slt   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_GE) {
-						cout << "  slt   " << getReg(now) << ", " << l << ", " << r << endl;
-						cout << "  seqz  " << getReg(now) << ", " << getReg(now) << endl;
+						cout << "  slt   t0, " << l << ", " << r << endl;
+						cout << "  seqz  t0, t0" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_LE) {
-						cout << "  sgt   " << getReg(now) << ", " << l << ", " << r << endl;
-						cout << "  seqz  " << getReg(now) << ", " << getReg(now) << endl;
+						cout << "  sgt   t0, " << l << ", " << r << endl;
+						cout << "  seqz  t0, t0" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_AND) {
-						cout << "  and   " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  and   t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
 					else if (val.op == KOOPA_RBO_OR) {
-						cout << "  or    " << getReg(now) << ", " << l << ", " << r << endl;
+						cout << "  or    t0, " << l << ", " << r << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << now << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  sw    t0, a0" << endl;
+						}
 					}
-					char tt[3];
-					strcpy(tt, getReg(now));
-					strcpy(Reg[now].name, tt);
-					Reg[now].address = (int*)value;
-					now++;
+					LocInsert((int*)value, now);
+					now += 4;
 				}
 				else if (value->kind.tag == KOOPA_RVT_RETURN) {
 					koopa_raw_value_t ret_value = value->kind.data.ret.value;
 					if (ret_value->kind.tag == KOOPA_RVT_INTEGER) {
-						cout << "  li    " << "a0, " << ret_value->kind.data.integer.value << endl << "  ret" << endl;
+						cout << "  li    " << "a0, " << ret_value->kind.data.integer.value << endl;
 					}
-					else if (ret_value->kind.tag == KOOPA_RVT_BINARY) {
-						string retreg = regfind((int*)ret_value);
-						if (retreg!="a0") {
-							cout << "  mv    " << "a0, " << regfind((int*)ret_value) << endl << "  ret" << endl;
+					else if (ret_value->kind.tag == KOOPA_RVT_BINARY || ret_value->kind.tag == KOOPA_RVT_LOAD || ret_value->kind.tag == KOOPA_RVT_ALLOC) {
+						int tmp = LocFind((int*)ret_value);
+						if (tmp < 2048) {
+							cout << "  lw    a0, " << tmp << "(sp)" << endl;
 						}
 						else {
-							cout << "  ret" << endl;
+							cout << "  li    a0, " << tmp << endl;
+							cout << "  add   a0, a0, sp" << endl;
 						}
 					}
+					// epilogue
+					if (offset < 2048) {
+						cout << "  addi  sp, sp, " << offset << endl;
+					}
+					else {
+						cout << "  li    t0, " << offset << endl;
+						cout << "  add   sp, sp, t0" << endl;
+					}
+					cout << "  ret" << endl;
+				}
+				else if (value->kind.tag == KOOPA_RVT_STORE) {
+					koopa_raw_store_t val = value->kind.data.store;
+					if (val.value->kind.tag == KOOPA_RVT_INTEGER) {
+						cout << "  li    a0, " << val.value->kind.data.integer.value << endl;
+						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
+							cout << "  sw    a0, " << val.dest->kind.data.integer.value << endl;
+						}
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD) {
+							int tmp = LocFind((int*)val.dest);
+							if (tmp < 2048) {
+								cout << "  sw    a0, " << tmp << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    a1, " << tmp << endl;
+								cout << "  add   a1, a1, sp" << endl;
+								cout << "  sw    a0, a1" << endl;
+							}
+						}
+						else if (val.dest->kind.tag == KOOPA_RVT_ALLOC) {
+							int tmp = LocFind((int*)val.dest);
+							if (tmp == -1) {
+								if (now < 2048) {
+									cout << "  sw    a0, " << now << "(sp)" << endl;
+								}
+								else {
+									cout << "  li    a1, " << now << endl;
+									cout << "  add   a1, a1, sp" << endl;
+									cout << "  sw    a0, a1" << endl;
+								}
+								LocInsert((int*)val.dest, now);
+								now += 4;
+							}
+							else {
+								if (tmp < 2048) {
+									cout << "  sw    a0, " << tmp << "(sp)" << endl;
+								}
+								else {
+									cout << "  li    a1, " << tmp << endl;
+									cout << "  add   a1, a1, sp" << endl;
+									cout << "  sw    a0, a1" << endl;
+								}
+							}
+						}
+					}
+					else if (val.value->kind.tag == KOOPA_RVT_BINARY || val.value->kind.tag == KOOPA_RVT_LOAD) {
+						int left = LocFind((int*)val.value);
+						if (left < 2048) {
+							cout << "  lw    a0, " << left << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << left << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  lw    a0, a0" << endl;
+						}
+						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
+							cout << "  sw    a0, " << val.dest->kind.data.integer.value << endl;
+						}
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD) {
+							int right = LocFind((int*)val.dest);
+							if (right < 2048) {
+								cout << "  sw    a0, " << right << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    a1, " << right << endl;
+								cout << "  add   a1, a1, sp" << endl;
+								cout << "  sw    a0, a1" << endl;
+							}
+						}
+						else if (val.dest->kind.tag == KOOPA_RVT_ALLOC) {
+							int tmp = LocFind((int*)val.dest);
+							if (tmp == -1) {
+								if (now < 2048) {
+									cout << "  sw    a0, " << now << "(sp)" << endl;
+								}
+								else {
+									cout << "  li    a1, " << now << endl;
+									cout << "  add   a1, a1, sp" << endl;
+									cout << "  sw    a0, a1" << endl;
+								}
+								LocInsert((int*)val.dest, now);
+								now += 4;
+							}
+							else {
+								if (tmp < 2048) {
+									cout << "  sw    a0, " << tmp << "(sp)" << endl;
+								}
+								else {
+									cout << "  li    a1, " << tmp << endl;
+									cout << "  add   a1, a1, sp" << endl;
+									cout << "  sw    a0, a1" << endl;
+								}
+							}
+						}
+					}
+				}
+				else if (value->kind.tag == KOOPA_RVT_LOAD) {
+					koopa_raw_load_t val = value->kind.data.load;
+					if (val.src->kind.tag == KOOPA_RVT_INTEGER) {
+						cout << "  lw    a0, " << val.src->kind.data.integer.value << endl;
+						if (now < 2048) {
+							cout << "  sw    a0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a1, " << now << endl;
+							cout << "  add   a1, a1, sp" << endl;
+							cout << "  sw    a0, a1" << endl;
+						}
+					}
+					else if (val.src->kind.tag == KOOPA_RVT_BINARY || val.src->kind.tag == KOOPA_RVT_LOAD || val.src->kind.tag == KOOPA_RVT_ALLOC) {
+						int tmp = LocFind((int*)val.src);
+						if (tmp < 2048) {
+							cout << "  lw    a0, " << tmp << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << tmp << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  lw    a0, a0" << endl;
+						}
+						if (now < 2048) {
+							cout << "  sw    a0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a1, " << now << endl;
+							cout << "  add   a1, a1, sp" << endl;
+							cout << "  sw    a0, a1" << endl;
+						}
+					}
+					LocInsert((int*)value, now);
+					now += 4;
 				}
 			}
 		}
 	}
-
 	// 处理完成, 释放 raw program builder 占用的内存
 	// 注意, raw program 中所有的指针指向的内存均为 raw program builder 的内存
 	// 所以不要在 raw program 处理完毕之前释放 builder
