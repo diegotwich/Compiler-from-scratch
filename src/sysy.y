@@ -38,7 +38,7 @@ Block         ::= "{" {BlockItem} "}";
 (й╣ож: BlockItems    ::= BlockItem BlockItems | null;)
 BlockItem     ::= Decl | Stmt;
 
-Stmt          ::= LVal "=" Exp ";" | "return" Exp ";";
+Stmt          ::= LVal "=" Exp ";" | [Exp] | Block | "return" [Exp] ";";
 Exp			  ::= LOrExp;
 LVal          ::= IDENT;
 PrimaryExp	  ::= "(" Exp ")" | LVal | Number;
@@ -245,10 +245,30 @@ Stmt
 	  ast->l_val = unique_ptr<BaseAST>($1);
 	  ast->exp = unique_ptr<BaseAST>($3);
 	  $$ = ast;
+	} | Exp ';' {
+	  auto ast = new StmtAST();
+	  ast->type = 2;
+	  ast->exp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | /* NULL */ ';' {
+	  auto ast = new StmtAST();
+	  ast->type = 2;
+	  ast->exist = 0;
+	  $$ = ast;
 	} | RETURN Exp ';' {
 	  auto ast = new StmtAST();
 	  ast->type = 1;
 	  ast->exp = unique_ptr<BaseAST>($2);
+	  $$ = ast;
+	} | RETURN /* NULL */ ';' {
+	  auto ast = new StmtAST();
+	  ast->type = 1;
+	  ast->exist = 0;
+	  $$ = ast;
+	} | Block {
+	  auto ast = new StmtAST();
+	  ast->type = 3;
+	  ast->exp = unique_ptr<BaseAST>($1);
 	  $$ = ast;
 	}
 	;

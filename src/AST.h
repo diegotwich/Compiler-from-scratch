@@ -10,8 +10,9 @@ static int now = 0;
 
 typedef struct {
 	std::string name;
-	int value, status;
+	int value, status, cnt;
 	// status = 0为变量，=1为常量
+	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
 	bool init;
 }Symbol;
 
@@ -20,39 +21,104 @@ struct SymbolList{
 	SymbolList* next;
 };
 
-static SymbolList* list = NULL;
+struct BlockSymList {
+	SymbolList* symlist;
+	BlockSymList* father;
+};
+
+static BlockSymList* nowBlock = NULL;
+
+inline void AddBlock() {
+	if (nowBlock == NULL) {
+		nowBlock = new BlockSymList;
+		nowBlock->father = NULL;
+		nowBlock->symlist = NULL;
+	}
+	else {
+		BlockSymList* tmp = new BlockSymList;
+		tmp->father = nowBlock;
+		tmp->symlist = NULL;
+		nowBlock = tmp;
+	}
+	return;
+}
+
+inline void DeleteBlock() {
+	assert(nowBlock != NULL); // 尝试删除空链
+	BlockSymList* tmp = nowBlock->father;
+	if(nowBlock->symlist != NULL) delete nowBlock->symlist;
+	delete nowBlock;
+	nowBlock = tmp;
+	return;
+}
 
 inline SymbolList* FindSymbolValue(std::string s) {
-	SymbolList* tmp = list;
-	while (tmp != NULL) {
-		if (tmp->sym.name == s) {
-			return tmp;
+	BlockSymList* blockt = nowBlock;
+	// std::cout << "try to find : "<< s << std::endl;
+	while (blockt != NULL) {
+		SymbolList* tmp = blockt->symlist;
+		while (tmp != NULL) {
+			if (tmp->sym.name == s) {
+				return tmp;
+			}
+			tmp = tmp->next;
 		}
-		tmp = tmp->next;
+		blockt = blockt->father;
 	}
-	assert(tmp != NULL);
+	assert(blockt != NULL);
+	return NULL;
 }
 
 inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
-	SymbolList* p = list;
-	if (list == NULL) {
-		list = new SymbolList;
-		list->next = NULL;
-		list->sym.name = s;
-		list->sym.value = value;
-		list->sym.status = status;
-		list->sym.init = init;
-		return list->sym;
+	if (nowBlock == NULL) {
+		nowBlock = new BlockSymList;
+		nowBlock->father = NULL;
+		nowBlock->symlist = NULL;
 	}
-	while (p->next != NULL) p = p->next;
-	SymbolList* tmp = new SymbolList;
-	tmp->next = NULL;
-	tmp->sym.name = s;
-	tmp->sym.value = value;
-	tmp->sym.status = status;
-	tmp->sym.init = init;
-	p->next = tmp;
-	return tmp->sym;
+	SymbolList* p = nowBlock->symlist;
+	while (p != NULL) {
+		assert(p->sym.name != s); //重定义
+		p = p->next;
+	}
+	// 找到目前是第几个同名变量
+	BlockSymList* blockt = nowBlock->father;
+	int cnt = 1;
+	bool ok = 0;
+	while (!ok && blockt != NULL) {
+		p = blockt->symlist;
+		while (p != NULL) {
+			if (p->sym.name == s) {
+				cnt = p->sym.cnt + 1;
+				ok = 1;
+				break;
+			}
+			p = p->next;
+		}
+		blockt = blockt->father;
+	}
+	p = nowBlock->symlist;
+	if (nowBlock->symlist == NULL) {
+		nowBlock->symlist = new SymbolList;
+		nowBlock->symlist->next = NULL;
+		nowBlock->symlist->sym.name = s;
+		nowBlock->symlist->sym.value = value;
+		nowBlock->symlist->sym.status = status;
+		nowBlock->symlist->sym.init = init;
+		nowBlock->symlist->sym.cnt = cnt;
+		return nowBlock->symlist->sym;
+	}
+	else {
+		while (p->next != NULL) p = p->next;
+		SymbolList* tmp = new SymbolList;
+		tmp->next = NULL;
+		tmp->sym.name = s;
+		tmp->sym.value = value;
+		tmp->sym.status = status;
+		tmp->sym.init = init;
+		tmp->sym.cnt = cnt;
+		p->next = tmp;
+		return tmp->sym;
+	}
 }
 
 class BaseAST {
@@ -251,15 +317,15 @@ public:
 	std::unique_ptr<BaseAST> init_val;
 	int Dump() const override {
 		auto val = initialized ? init_val->Calc() : 0;
-		InsertSymbol(name, val, 0, initialized);
-		std::cout << "  @" << name << " = alloc i32" << std::endl;
+		Symbol sym = InsertSymbol(name, val, 0, initialized);
+		std::cout << "  @" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
 		if (initialized) {
 			int ret = init_val->Dump();
 			if (ret == -1) {
-				std::cout << "  store %" << now - 1 << ", @" << name << std::endl;
+				std::cout << "  store %" << now - 1 << ", @" << name << "_" << sym.cnt << std::endl;
 			}
 			else {
-				std::cout << "  store " << ret << ", @" << name << std::endl;
+				std::cout << "  store " << ret << ", @" << name << "_" << sym.cnt << std::endl;
 			}
 		}
 		return -1;
@@ -322,7 +388,7 @@ public:
 
 	int Dump() const override {
 		// std::cout << "FuncTypeAST { " << INT << " }";
-		std::cout << "i32 ";
+		std::cout << "i32 " << "{" << std::endl << "%entry:" << std::endl;
 		return -1;
 	}
 
@@ -344,8 +410,9 @@ public:
 		// std::cout << "Block { ";
 		// stmt->Dump();
 		// std::cout << " }";
-		std::cout << "{" << std::endl << "%entry:" << std::endl;
+		AddBlock();
 		block_items->Dump();
+		DeleteBlock();
 		return -1;
 	}
 
@@ -408,7 +475,7 @@ public:
 			return tmp->sym.value;
 		}
 		else {
-			std::cout << "  %" << now << " = load @" << tmp->sym.name << std::endl;
+			std::cout << "  %" << now << " = load @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			now++;
 			return -1;
 		}
@@ -423,6 +490,7 @@ public:
 
 class StmtAST : public BaseAST {
 public:
+	bool exist = 1;
 	int type;
 	std::unique_ptr<BaseAST> l_val;
 	std::unique_ptr<BaseAST> exp;
@@ -432,12 +500,17 @@ public:
 		// number->Dump();
 		// std::cout << " }";
 		if (type == 1) { // RETURN
-			int ret = exp->Dump();
-			if (ret == -1) {
-				std::cout << "  ret %" << now - 1 << std::endl << "}";
+			if (exist) {
+				int ret = exp->Dump();
+				if (ret == -1) {
+					std::cout << "  ret %" << now - 1 << std::endl << "}";
+				}
+				else {
+					std::cout << "  ret " << ret << std::endl << "}";
+				}
 			}
 			else {
-				std::cout << "  ret " << ret << std::endl << "}";
+				std::cout << "  ret" << std::endl << "}";
 			}
 		}
 		else if (type == 0) { // LVal = Exp
@@ -445,13 +518,16 @@ public:
 			assert(tmp->sym.status == 0); // 向常量赋值则错误
 			int ret = exp->Dump();
 			if (ret == -1) {
-				std::cout << "  store %" << now - 1 << ", @" << tmp->sym.name << std::endl;
+				std::cout << "  store %" << now - 1 << ", @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			}
 			else {
-				std::cout << "  store " << ret << ", @" << tmp->sym.name << std::endl;
+				std::cout << "  store " << ret << ", @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			}
 			tmp->sym.value = exp->Calc();
 			tmp->sym.init = 1;
+		}
+		else if (type == 3) { // Block
+			exp->Dump();
 		}
 		return -1;
 	}
