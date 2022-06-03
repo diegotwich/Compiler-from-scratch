@@ -8,6 +8,12 @@
 // 解决单赋值问题
 static int now = 0;
 
+// if else分支个数
+static int ifnow = 0;
+
+// 解决连续多个return问题
+static int retcnt = 0;
+
 typedef struct {
 	std::string name;
 	int value, status, cnt;
@@ -15,6 +21,12 @@ typedef struct {
 	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
 	bool init;
 }Symbol;
+
+// Dump的返回值，前面几个lv因为这个全部有大问题
+typedef struct {
+	int type;
+	int value;
+}Dumpret;
 
 struct SymbolList{
 	Symbol sym;
@@ -27,7 +39,12 @@ struct BlockSymList {
 };
 
 static BlockSymList* nowBlock = NULL;
+static SymbolList* allSymbol = NULL; // 所有已使用符号的名称，用来判断是否还需要分配空间
 
+inline void Debug() {
+	/* 设置断点专用函数,debug */
+	return;
+}
 inline void AddBlock() {
 	if (nowBlock == NULL) {
 		nowBlock = new BlockSymList;
@@ -96,6 +113,40 @@ inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
 		}
 		blockt = blockt->father;
 	}
+
+	// 判断以前是否使用过了这个名字，若使用过了则不需要alloc
+	bool used = 0;
+	SymbolList* atmp = allSymbol;
+	while (atmp != NULL) {
+		if (atmp->sym.name == s) {
+			if (atmp->sym.cnt >= cnt) {
+				used = 1; // 用过了
+			}
+			atmp->sym.cnt = atmp->sym.cnt > cnt ? atmp->sym.cnt : cnt;
+			break;
+		}
+		atmp = atmp->next;
+	}
+	if (atmp == NULL) { // 没找到就加进去
+		if (allSymbol == NULL) {
+			allSymbol = new SymbolList;
+			allSymbol->next = NULL;
+			allSymbol->sym.cnt = cnt;
+			allSymbol->sym.name = s;
+		}
+		else {
+			atmp = allSymbol;
+			while (atmp->next != NULL) {
+				atmp = atmp->next;
+			}
+			SymbolList* aatmp = new SymbolList;
+			aatmp->next = NULL;
+			aatmp->sym.cnt = cnt;
+			aatmp->sym.name = s;
+			atmp->next = aatmp;
+		}
+	}
+
 	p = nowBlock->symlist;
 	if (nowBlock->symlist == NULL) {
 		nowBlock->symlist = new SymbolList;
@@ -105,7 +156,9 @@ inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
 		nowBlock->symlist->sym.status = status;
 		nowBlock->symlist->sym.init = init;
 		nowBlock->symlist->sym.cnt = cnt;
-		return nowBlock->symlist->sym;
+		Symbol stmp = nowBlock->symlist->sym;
+		if (used) stmp.status = -1;
+		return stmp;
 	}
 	else {
 		while (p->next != NULL) p = p->next;
@@ -117,7 +170,9 @@ inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
 		tmp->sym.init = init;
 		tmp->sym.cnt = cnt;
 		p->next = tmp;
-		return tmp->sym;
+		Symbol stmp = tmp->sym;
+		if (used) stmp.status = -1;
+		return stmp;
 	}
 }
 
@@ -125,7 +180,7 @@ class BaseAST {
 public:
 	virtual ~BaseAST() = default;
 
-	virtual int Dump() const = 0;
+	virtual Dumpret Dump() const = 0;
 
 	virtual int Calc() const = 0;
 
@@ -136,11 +191,13 @@ class CompUnitAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> func_def;
 
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// std::cout << "CompUnitAST { ";
 		func_def->Dump();
 		// std::cout << " }";
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 
 	int Calc() const override {
@@ -157,9 +214,11 @@ class DeclAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> decl;
 
-	int Dump() const override {
+	Dumpret Dump() const override {
 		decl->Dump();
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 
 	int Calc() const override {
@@ -177,11 +236,13 @@ public:
 	std::unique_ptr<BaseAST> btype;
 	std::unique_ptr<BaseAST> const_def;
 	std::unique_ptr<BaseAST> const_defs;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		btype->Dump();
 		const_def->Dump();
 		const_defs->Dump();
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 
@@ -196,9 +257,11 @@ public:
 class BTypeAST : public BaseAST {
 public:
 	std::string type;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// std::cout << type;
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 
@@ -215,12 +278,14 @@ public:
 	bool exist = 1;
 	std::unique_ptr<BaseAST> const_def;
 	std::unique_ptr<BaseAST> const_defs;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		if (exist) {
 			const_def->Dump();
 			const_defs->Dump();
-		}
-		return -1;
+		}		
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 
@@ -236,10 +301,12 @@ class ConstDefAST : public BaseAST {
 public:
 	std::string name;
 	std::unique_ptr<BaseAST> const_init_val;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		auto val = const_init_val->Calc();
 		InsertSymbol(name, val, 1, 1);
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 
@@ -254,9 +321,11 @@ public:
 class ConstInitValAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> const_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// const_exp->Dump();
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 		return const_exp->Calc();
@@ -272,11 +341,13 @@ public:
 	std::unique_ptr<BaseAST> btype;
 	std::unique_ptr<BaseAST> var_def;
 	std::unique_ptr<BaseAST> var_defs;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		btype->Dump();
 		var_def->Dump();
 		var_defs->Dump();
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 		
@@ -293,12 +364,14 @@ public:
 	bool exist = 1;
 	std::unique_ptr<BaseAST> var_def;
 	std::unique_ptr<BaseAST> var_defs;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		if (exist) {
 			var_def->Dump();
 			var_defs->Dump();
 		}
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 
@@ -315,20 +388,22 @@ public:
 	bool initialized = 1; //是否初始化
 	std::string name;
 	std::unique_ptr<BaseAST> init_val;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		auto val = initialized ? init_val->Calc() : 0;
 		Symbol sym = InsertSymbol(name, val, 0, initialized);
-		std::cout << "  @" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
+		if(sym.status != -1) std::cout << "  @" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
 		if (initialized) {
-			int ret = init_val->Dump();
-			if (ret == -1) {
+			Dumpret dret = init_val->Dump();
+			if (dret.type != 0) {
 				std::cout << "  store %" << now - 1 << ", @" << name << "_" << sym.cnt << std::endl;
 			}
 			else {
-				std::cout << "  store " << ret << ", @" << name << "_" << sym.cnt << std::endl;
+				std::cout << "  store " << dret.value << ", @" << name << "_" << sym.cnt << std::endl;
 			}
 		}
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	int Calc() const override {
 
@@ -343,7 +418,7 @@ public:
 class InitValAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		return exp->Dump();
 	}
 	int Calc() const override {
@@ -361,7 +436,7 @@ public:
 	std::string ident;
 	std::unique_ptr<BaseAST> block;
 
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// std::cout << "FuncDefAST { ";
 		// func_type->Dump();
 		// std::cout << ", " << ident << ", ";
@@ -370,7 +445,10 @@ public:
 		std::cout << "fun @" << ident << "(): ";
 		func_type->Dump();
 		block->Dump();
-		return -1;
+		std::cout << "}";
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 
 	int Calc() const override {
@@ -386,10 +464,12 @@ public:
 class FuncTypeAST : public BaseAST {
 public:
 
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// std::cout << "FuncTypeAST { " << INT << " }";
 		std::cout << "i32 " << "{" << std::endl << "%entry:" << std::endl;
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 
 	int Calc() const override {
@@ -406,14 +486,14 @@ class BlockAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> block_items;
 
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// std::cout << "Block { ";
 		// stmt->Dump();
 		// std::cout << " }";
 		AddBlock();
-		block_items->Dump();
+		Dumpret tmp = block_items->Dump();
 		DeleteBlock();
-		return -1;
+		return tmp;
 	}
 
 	int Calc() const override {
@@ -432,16 +512,26 @@ public:
 	std::unique_ptr<BaseAST> block_item;
 	std::unique_ptr<BaseAST> block_items;
 
-	int Dump() const override {
+	Dumpret Dump() const override {
+		Dumpret tmp1, tmp2;
 		if (exist) {
-			block_item->Dump();
-			block_items->Dump();
+			tmp1 = block_item->Dump();
+			int rett = block_items->Calc();
+			if (tmp1.type == 2 && rett == 1) { // return后紧跟语句
+				std::cout << std::endl << "%afret" << retcnt << ":" << std::endl;
+				retcnt++;
+			}
+			tmp2 = block_items->Dump();
 		}
-		return -1;
+		else {
+			tmp1.type = -1;
+			return tmp1;
+		}
+		return tmp2.type == -1 ? tmp1 : tmp2;
 	}
 	int Calc() const override {
-		
-		return -1;
+		if (exist) return 1;
+		return 0;
 	}
 	SymbolList* FindSym() const override{
 
@@ -452,9 +542,9 @@ public:
 class BlockItemAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> bi_ptr;
-	int Dump() const override {
-		bi_ptr->Dump();
-		return -1;
+	Dumpret Dump() const override {
+		
+		return bi_ptr->Dump();
 	}
 	int Calc() const override {
 		
@@ -469,15 +559,20 @@ public:
 class LValAST : public BaseAST {
 public:
 	std::string name;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		SymbolList* tmp = FindSymbolValue(name);
 		if (tmp->sym.status == 1) {
-			return tmp->sym.value;
+			Dumpret p;
+			p.type = 0;
+			p.value = tmp->sym.value;
+			return p;
 		}
 		else {
 			std::cout << "  %" << now << " = load @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			now++;
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 	}
 	int Calc() const override {
@@ -490,46 +585,86 @@ public:
 
 class StmtAST : public BaseAST {
 public:
+	std::unique_ptr<BaseAST> stmt;
+	Dumpret Dump() const override {
+		return stmt->Dump();
+		 
+	}
+	int Calc() const override {
+		return -1;
+	}
+	SymbolList* FindSym() const override {
+		return NULL;
+	}
+};
+
+class MatchedStmtAST : public BaseAST {
+public:
 	bool exist = 1;
 	int type;
 	std::unique_ptr<BaseAST> l_val;
+	std::unique_ptr<BaseAST> m_stmt;
 	std::unique_ptr<BaseAST> exp;
 	
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// std::cout << "Stmt { ";
 		// number->Dump();
 		// std::cout << " }";
 		if (type == 1) { // RETURN
 			if (exist) {
-				int ret = exp->Dump();
-				if (ret == -1) {
-					std::cout << "  ret %" << now - 1 << std::endl << "}";
+				Dumpret dret = exp->Dump();
+				if (dret.type != 0) {
+					std::cout << "  ret %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << "  ret " << ret << std::endl << "}";
+					std::cout << "  ret " << dret.value << std::endl;
 				}
 			}
 			else {
-				std::cout << "  ret" << std::endl << "}";
+				std::cout << "  ret" << std::endl;
 			}
+			Dumpret tmp;
+			tmp.type = 2; // RETURN
+			return tmp;
 		}
 		else if (type == 0) { // LVal = Exp
 			SymbolList* tmp = l_val->FindSym();
 			assert(tmp->sym.status == 0); // 向常量赋值则错误
-			int ret = exp->Dump();
-			if (ret == -1) {
+			Dumpret dret = exp->Dump();
+			if (dret.type != 0) {
 				std::cout << "  store %" << now - 1 << ", @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			}
 			else {
-				std::cout << "  store " << ret << ", @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+				std::cout << "  store " << dret.value << ", @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			}
 			tmp->sym.value = exp->Calc();
 			tmp->sym.init = 1;
 		}
 		else if (type == 3) { // Block
-			exp->Dump();
+			return exp->Dump();
 		}
-		return -1;
+		else if (type == 4) { // IF ELSE
+			int iftag = ifnow;
+			ifnow++;
+			Dumpret dret = exp->Dump();
+			if (dret.type != 0) {
+				std::cout << "  br %" << now - 1 << ", %then" << iftag << ", %else" << iftag << std::endl;
+			}
+			else {
+				std::cout << "  br " << dret.value << ", %then" << iftag << ", %else" << iftag << std::endl;
+			}
+			std::cout << std::endl << "%then" << iftag << ":" << std::endl;
+			Debug();
+			Dumpret dret1 = l_val->Dump();
+			if(dret1.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+			std::cout << std::endl << "%else" << iftag << ":" << std::endl;
+			Dumpret dret2 = m_stmt->Dump();
+			if(dret2.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+			std::cout << std::endl << "%end" << iftag << ":" << std::endl;
+		}
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 	
 	int Calc() const override {
@@ -542,11 +677,56 @@ public:
 	}
 };
 
+class OpenStmtAST : public BaseAST {
+public:
+	bool type = 0;
+	std::unique_ptr<BaseAST> exp;
+	std::unique_ptr<BaseAST> m_stmt;
+	std::unique_ptr<BaseAST> o_stmt;
+	Dumpret Dump() const override {
+		Dumpret dret = exp->Dump();
+		int iftag = ifnow;
+		ifnow++;
+		if (dret.type != 0) {
+			std::cout << "  br %" << now - 1 << ", %then" << iftag;
+		}
+		else {
+			std::cout << "  br " << dret.value << ", %then" << iftag;
+		}
+		if (type) {
+			std::cout << ", %else" << iftag << std::endl;
+		}
+		else {
+			std::cout << ", %end" << iftag << std::endl;
+		}
+		std::cout << std::endl << "%then" << iftag << ":" << std::endl;
+		Dumpret dret1 = m_stmt->Dump();
+		if(dret1.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+		if (type) {
+			std::cout << std::endl << "%else" << iftag << ":" << std::endl;
+			Dumpret dret2 = o_stmt->Dump();
+			if(dret2.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+		}
+		std::cout << std::endl << "%end" << iftag << ":" << std::endl;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
+	}
+	int Calc() const override {
+
+		return -1;
+	}
+	SymbolList* FindSym() const override {
+
+		return NULL;
+	}
+};
+
 class ExpAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> lorexp;
 
-	int Dump() const override {
+	Dumpret Dump() const override {
 		return lorexp->Dump();
 	}
 
@@ -562,7 +742,7 @@ public:
 class PrimaryExpAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> p_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		return p_exp->Dump();
 	}
 
@@ -579,32 +759,36 @@ class UnaryExpAST : public BaseAST {
 public:
 	std::string unaryop;
 	std::unique_ptr<BaseAST> u_exp;
-	int Dump() const override {
-		int ret = u_exp->Dump();
+	Dumpret Dump() const override {
+		Dumpret dret = u_exp->Dump();
 		char tmp = unaryop[0];
 		if (tmp == '-') {
-			if (ret == -1) {
+			if (dret.type != 0) {
 				std::cout << "  %" << now << " = " << "sub 0, " << '%' << now - 1 << std::endl;
 				now++;
 			}
 			else {
-				std::cout << "  %" << now << " = " << "sub 0, " << ret << std::endl;
+				std::cout << "  %" << now << " = " << "sub 0, " << dret.value << std::endl;
 				now++;
 			}
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 		if (tmp == '!') {
-			if (ret == -1) {
+			if (dret.type != 0) {
 				std::cout << "  %" << now << " = " << "eq 0, " << '%' << now - 1 << std::endl;
 				now++;
 			}
 			else {
-				std::cout << "  %" << now << " = " << "eq 0, " << ret << std::endl;
+				std::cout << "  %" << now << " = " << "eq 0, " << dret.value << std::endl;
 				now++;
 			}
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
-		return ret;
+		return dret;
 	}
 	
 	int Calc() const override {
@@ -627,13 +811,13 @@ public:
 	std::string mulop;
 	std::unique_ptr<BaseAST> m_exp;
 	std::unique_ptr<BaseAST> u_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		char tmp = mulop[0];
 		if (tmp == '*' || tmp == '/' || tmp == '%') {
-			int mret = m_exp->Dump();
-			if (mret == -1) {
+			Dumpret mret = m_exp->Dump();
+			if (mret.type != 0) {
 				int tnow = now - 1;
-				int uret = u_exp->Dump();
+				Dumpret uret = u_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (tmp == '*') {
 					std::cout << "mul ";
@@ -644,15 +828,15 @@ public:
 				else {
 					std::cout << "mod ";
 				}
-				if (uret == -1) {
+				if (uret.type != 0) {
 					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << "%" << tnow << ", " << uret << std::endl;
+					std::cout << "%" << tnow << ", " << uret.value << std::endl;
 				}
 			}
 			else {
-				int uret = u_exp->Dump();
+				Dumpret uret = u_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (tmp == '*') {
 					std::cout << "mul ";
@@ -663,15 +847,17 @@ public:
 				else {
 					std::cout << "mod ";
 				}
-				if (uret == -1) {
-					std::cout << mret << ", %" << now - 1 << std::endl;
+				if (uret.type != 0) {
+					std::cout << mret.value << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << mret << ", " << uret << std::endl;
+					std::cout << mret.value << ", " << uret.value << std::endl;
 				}
 			}
 			now++;
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 		return u_exp->Dump();
 	}
@@ -699,13 +885,13 @@ public:
 	std::string addop;
 	std::unique_ptr<BaseAST> m_exp;
 	std::unique_ptr<BaseAST> a_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		char tmp = addop[0];
 		if (tmp == '+' || tmp == '-') {
-			int aret = a_exp->Dump();
-			if (aret == -1) {
+			Dumpret aret = a_exp->Dump();
+			if (aret.type != 0) {
 				int tnow = now - 1;
-				int mret = m_exp->Dump();
+				Dumpret mret = m_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (tmp == '+') {
 					std::cout << "add ";
@@ -713,15 +899,15 @@ public:
 				else {
 					std::cout << "sub ";
 				}
-				if (mret == -1) {
+				if (mret.type != 0) {
 					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << "%" << tnow << ", " << mret << std::endl;
+					std::cout << "%" << tnow << ", " << mret.value << std::endl;
 				}
 			}
 			else {
-				int mret = m_exp->Dump();
+				Dumpret mret = m_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (tmp == '+') {
 					std::cout << "add ";
@@ -729,15 +915,17 @@ public:
 				else {
 					std::cout << "sub ";
 				}
-				if (mret == -1) {
-					std::cout << aret << ", %" << now - 1 << std::endl;
+				if (mret.type != 0) {
+					std::cout << aret.value << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << aret << ", " << mret << std::endl;
+					std::cout << aret.value << ", " << mret.value << std::endl;
 				}
 			}
 			now++;
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 		return m_exp->Dump();
 	}
@@ -762,12 +950,12 @@ public:
 	std::string relop;
 	std::unique_ptr<BaseAST> a_exp;
 	std::unique_ptr<BaseAST> r_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		if (relop == ">" || relop == "<" || relop == ">=" || relop == "<=") {
-			int rret = r_exp->Dump();
-			if (rret == -1) {
+			Dumpret rret = r_exp->Dump();
+			if (rret.type != 0) {
 				int tnow = now - 1;
-				int aret = a_exp->Dump();
+				Dumpret aret = a_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (relop == ">") {
 					std::cout << "gt ";
@@ -781,15 +969,15 @@ public:
 				else if (relop == "<=") {
 					std::cout << "le ";
 				}
-				if (aret == -1) {
+				if (aret.type != 0) {
 					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << "%" << tnow << ", " << aret << std::endl;
+					std::cout << "%" << tnow << ", " << aret.value << std::endl;
 				}
 			}
 			else {
-				int aret = a_exp->Dump();
+				Dumpret aret = a_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (relop == ">") {
 					std::cout << "gt ";
@@ -803,15 +991,17 @@ public:
 				else if (relop == "<=") {
 					std::cout << "le ";
 				}
-				if (aret == -1) {
-					std::cout << rret << ", %" << now - 1 << std::endl;
+				if (aret.type != 0) {
+					std::cout << rret.value << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << rret << ", " << aret << std::endl;
+					std::cout << rret.value << ", " << aret.value << std::endl;
 				}
 			}
 			now++;
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 		return a_exp->Dump();
 	}
@@ -842,12 +1032,12 @@ public:
 	std::string eqop;
 	std::unique_ptr<BaseAST> r_exp;
 	std::unique_ptr<BaseAST> e_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		if (eqop == "==" || eqop == "!=") {
-			int eret = e_exp->Dump();
-			if (eret == -1) {
+			Dumpret eret = e_exp->Dump();
+			if (eret.type != 0) {
 				int tnow = now - 1;
-				int rret = r_exp->Dump();
+				Dumpret rret = r_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (eqop == "==") {
 					std::cout << "eq ";
@@ -855,15 +1045,15 @@ public:
 				else if (eqop == "!=") {
 					std::cout << "ne ";
 				}
-				if (rret == -1) {
+				if (rret.type != 0) {
 					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << "%" << tnow << ", " << rret << std::endl;
+					std::cout << "%" << tnow << ", " << rret.value << std::endl;
 				}
 			}
 			else {
-				int rret = r_exp->Dump();
+				Dumpret rret = r_exp->Dump();
 				std::cout << "  %" << now << " = ";
 				if (eqop == "==") {
 					std::cout << "eq ";
@@ -871,15 +1061,17 @@ public:
 				else if (eqop == "!=") {
 					std::cout << "ne ";
 				}
-				if (rret == -1) {
-					std::cout << eret << ", %" << now - 1 << std::endl;
+				if (rret.type != 0) {
+					std::cout << eret.value << ", %" << now - 1 << std::endl;
 				}
 				else {
-					std::cout << eret << ", " << rret << std::endl;
+					std::cout << eret.value << ", " << rret.value << std::endl;
 				}
 			}
 			now++;
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 		return r_exp->Dump();
 	}
@@ -904,38 +1096,47 @@ public:
 	std::string andop;
 	std::unique_ptr<BaseAST> e_exp;
 	std::unique_ptr<BaseAST> la_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		if (andop == "&&") {
-			int laret = la_exp->Dump();
-			if (laret == -1) {
-				int tnow = now - 1;
-				int eret = e_exp->Dump();
-				std::cout << "  %" << now << " = ne 0, %" << tnow << std::endl;
-				now++;
-				if (eret == -1) {
-					std::cout << "  %" << now << " = ne 0, %" << now - 2 << std::endl;
+			Debug();
+			Dumpret laret = la_exp->Dump();
+			int lhs = la_exp->Calc();
+			if (lhs != 0) {
+				if (laret.type != 0) {
+					int tnow = now - 1;
+					Dumpret eret = e_exp->Dump();
+					std::cout << "  %" << now << " = ne 0, %" << tnow << std::endl;
+					now++;
+					if (eret.type != 0) {
+						std::cout << "  %" << now << " = ne 0, %" << now - 2 << std::endl;
+					}
+					else {
+						std::cout << "  %" << now << " = ne 0, " << eret.value << std::endl;
+					}
+					now++;
+					std::cout << "  %" << now << " = and %" << now - 1 << ", %" << now - 2 << std::endl;
 				}
 				else {
-					std::cout << "  %" << now << " = ne 0, " << eret << std::endl;
+					Dumpret eret = e_exp->Dump();
+					std::cout << "  %" << now << " = ne 0, " << laret.value << std::endl;
+					now++;
+					if (eret.type != 0) {
+						std::cout << "  %" << now << " = ne 0, %" << now - 2 << std::endl;
+					}
+					else {
+						std::cout << "  %" << now << " = ne 0, " << eret.value << std::endl;
+					}
+					now++;
+					std::cout << "  %" << now << " = and %" << now - 1 << ", %" << now - 2 << std::endl;
 				}
-				now++;
-				std::cout << "  %" << now << " = and %" << now - 1 << ", %" << now - 2 << std::endl;
 			}
 			else {
-				int eret = e_exp->Dump();
-				std::cout << "  %" << now << " = ne 0, " << laret << std::endl;
-				now++;
-				if (eret == -1) {
-					std::cout << "  %" << now << " = ne 0, %" << now - 2 << std::endl;
-				}
-				else {
-					std::cout << "  %" << now << " = ne 0, " << eret << std::endl;
-				}
-				now++;
-				std::cout << "  %" << now << " = and %" << now - 1 << ", %" << now - 2 << std::endl;
+				std::cout << "  %" << now << " = add 0, 0" << std::endl;
 			}
 			now++;
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 		return e_exp->Dump();
 	}
@@ -957,36 +1158,44 @@ public:
 	std::string orop;
 	std::unique_ptr<BaseAST> la_exp;
 	std::unique_ptr<BaseAST> lo_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		if (orop == "||") {
-			int loret = lo_exp->Dump();
-			if (loret == -1) {
-				int tnow = now - 1;
-				int laret = la_exp->Dump();
-				std::cout << "  %" << now << " = or ";
-				if (laret == -1) {
-					std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
+			Dumpret loret = lo_exp->Dump();
+			int lhs = lo_exp->Calc();
+			if (lhs == 0) {
+				if (loret.type != 0) {
+					int tnow = now - 1;
+					Dumpret laret = la_exp->Dump();
+					std::cout << "  %" << now << " = or ";
+					if (laret.type != 0) {
+						std::cout << "%" << tnow << ", %" << now - 1 << std::endl;
+					}
+					else {
+						std::cout << "%" << tnow << ", " << laret.value << std::endl;
+					}
+					now++;
+					std::cout << "  %" << now << " = ne %" << now - 1 << ", 0" << std::endl;
 				}
 				else {
-					std::cout << "%" << tnow << ", " << laret << std::endl;
+					Dumpret laret = la_exp->Dump();
+					std::cout << "  %" << now << " = or ";
+					if (laret.type == -1) {
+						std::cout << loret.value << ", %" << now - 1 << std::endl;
+					}
+					else {
+						std::cout << loret.value << ", " << laret.value << std::endl;
+					}
+					now++;
+					std::cout << "  %" << now << " = ne %" << now - 1 << ", 0" << std::endl;
 				}
-				now++;
-				std::cout << "  %" << now << " = ne %" << now - 1 << ", 0" << std::endl;
 			}
 			else {
-				int laret = la_exp->Dump();
-				std::cout << "  %" << now << " = or ";
-				if (laret == -1) {
-					std::cout << loret << ", %" << now - 1 << std::endl;
-				}
-				else {
-					std::cout << loret << ", " << laret << std::endl;
-				}
-				now++;
-				std::cout << "  %" << now << " = ne %" << now - 1 << ", 0" << std::endl;
+				std::cout << "  %" << now << " = add 0, 1" << std::endl;
 			}
 			now++;
-			return -1;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
 		}
 		return la_exp->Dump();
 	}
@@ -1006,9 +1215,11 @@ public:
 class ConstExpAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> c_exp;
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// c_exp->Dump();
-		return -1;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
 	}
 
 	int Calc() const override {
@@ -1024,9 +1235,12 @@ class NumberAST : public BaseAST {
 public:
 	std::string IntConst;
 
-	int Dump() const override {
+	Dumpret Dump() const override {
 		// std::cout << "Number { " << IntConst << " }";
-		return atoi(IntConst.c_str());
+		Dumpret tmp;
+		tmp.type = 0;
+		tmp.value = atoi(IntConst.c_str());
+		return tmp;
 	}
 
 	int Calc() const override {

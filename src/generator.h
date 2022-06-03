@@ -123,6 +123,7 @@ void parse_str(const char* str) {
 		for (size_t j = 0; j < func->bbs.len; ++j) {
 			assert(func->bbs.kind == KOOPA_RSIK_BASIC_BLOCK);
 			koopa_raw_basic_block_t bb = (koopa_raw_basic_block_t)func->bbs.buffer[j];
+			cout << endl << bb->name + 1 << ":" << endl;
 			// 进一步处理当前基本块
 			for (size_t k = 0; k < bb->insts.len; ++k) {
 				koopa_raw_value_t value = (koopa_raw_value_t)bb->insts.buffer[k];
@@ -480,6 +481,30 @@ void parse_str(const char* str) {
 					}
 					LocInsert((int*)value, now);
 					now += 4;
+				}
+				else if (value->kind.tag == KOOPA_RVT_BRANCH) {
+					koopa_raw_branch_t val = value->kind.data.branch;
+					if (val.cond->kind.tag == KOOPA_RVT_INTEGER) {
+						cout << "  li    a0, " << val.cond->kind.data.integer.value << endl;
+						cout << "  bnez  a0, " << val.true_bb->name + 1 << endl;
+					}
+					else {
+						int tmp = LocFind((int*)val.cond);
+						if (tmp < 2048) {
+							cout << "  lw    a0, " << tmp << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    a0, " << tmp << endl;
+							cout << "  add   a0, a0, sp" << endl;
+							cout << "  lw    a0, a0" << endl;
+						}
+						cout << "  bnez  a0, " << val.true_bb->name + 1 << endl;
+					}
+					cout << "  j     " << val.false_bb->name + 1 << endl;
+				}
+				else if (value->kind.tag == KOOPA_RVT_JUMP) {
+					koopa_raw_jump_t val = value->kind.data.jump;
+					cout << "  j     " << val.target->name + 1 << endl;
 				}
 			}
 		}

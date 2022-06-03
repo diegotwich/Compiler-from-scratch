@@ -34,11 +34,13 @@ InitVal       ::= Exp;
 FuncDef       ::= FuncType IDENT "(" ")" Block;
 FuncType      ::= "int";
 
-Block         ::= "{" {BlockItem} "}";
-(实现: BlockItems    ::= BlockItem BlockItems | null;)
+Block         ::= "{" BlockItems "}";
+BlockItems    ::= BlockItem BlockItems | null;
 BlockItem     ::= Decl | Stmt;
 
-Stmt          ::= LVal "=" Exp ";" | [Exp] | Block | "return" [Exp] ";";
+Stmt		  ::= MatchedStmt | OpenStmt;
+MatchedStmt   ::= LVal "=" Exp ";" | [Exp] | Block | "return" [Exp] ";" | "if" "(" Exp ")" "else" MatchedStmt;
+OpenStmt	  ::= "if" "(" Exp ")" Stmt | "if" "(" Exp ")" MatchedStmt "else" OpenStmt;
 Exp			  ::= LOrExp;
 LVal          ::= IDENT;
 PrimaryExp	  ::= "(" Exp ")" | LVal | Number;
@@ -66,12 +68,12 @@ ConstExp      ::= Exp;
 }
 
 // lexer返回的所有token类型
-%token INT RETURN CONST
+%token INT RETURN CONST IF ELSE
 %token <str_val> IDENT RelOp EqOp AndOp OrOp
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt Number Exp PrimaryExp UnaryExp AddExp MulExp RelExp EqExp LAndExp LOrExp Decl ConstDecl BType ConstDef  ConstDefs ConstInitVal BlockItems BlockItem LVal ConstExp VarDecl VarDefs VarDef InitVal
+%type <ast_val> FuncDef FuncType Block Stmt MatchedStmt OpenStmt Number Exp PrimaryExp UnaryExp AddExp MulExp RelExp EqExp LAndExp LOrExp Decl ConstDecl BType ConstDef  ConstDefs ConstInitVal BlockItems BlockItem LVal ConstExp VarDecl VarDefs VarDef InitVal
 
 %%
 
@@ -239,40 +241,75 @@ BlockItem
 	;
 
 Stmt
-	: LVal '=' Exp ';' {
+	: MatchedStmt {
 	  auto ast = new StmtAST();
+	  ast->stmt = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | OpenStmt {
+	  auto ast = new StmtAST();
+	  ast->stmt = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	}
+	;
+
+MatchedStmt
+	: LVal '=' Exp ';' {
+	  auto ast = new MatchedStmtAST();
 	  ast->type = 0;
 	  ast->l_val = unique_ptr<BaseAST>($1);
 	  ast->exp = unique_ptr<BaseAST>($3);
 	  $$ = ast;
 	} | Exp ';' {
-	  auto ast = new StmtAST();
+	  auto ast = new MatchedStmtAST();
 	  ast->type = 2;
 	  ast->exp = unique_ptr<BaseAST>($1);
 	  $$ = ast;
 	} | /* NULL */ ';' {
-	  auto ast = new StmtAST();
+	  auto ast = new MatchedStmtAST();
 	  ast->type = 2;
 	  ast->exist = 0;
 	  $$ = ast;
 	} | RETURN Exp ';' {
-	  auto ast = new StmtAST();
+	  auto ast = new MatchedStmtAST();
 	  ast->type = 1;
 	  ast->exp = unique_ptr<BaseAST>($2);
 	  $$ = ast;
 	} | RETURN /* NULL */ ';' {
-	  auto ast = new StmtAST();
+	  auto ast = new MatchedStmtAST();
 	  ast->type = 1;
 	  ast->exist = 0;
 	  $$ = ast;
 	} | Block {
-	  auto ast = new StmtAST();
+	  auto ast = new MatchedStmtAST();
 	  ast->type = 3;
 	  ast->exp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | IF '(' Exp ')' MatchedStmt ELSE MatchedStmt {
+	  auto ast = new MatchedStmtAST();
+	  ast->type = 4;
+	  ast->exp = unique_ptr<BaseAST>($3);
+	  ast->l_val = unique_ptr<BaseAST>($5);
+	  ast->m_stmt = unique_ptr<BaseAST>($7);
 	  $$ = ast;
 	}
 	;
 	
+OpenStmt
+	: IF '(' Exp ')' Stmt {
+	  auto ast = new OpenStmtAST();
+	  ast->exp = unique_ptr<BaseAST>($3);
+	  ast->m_stmt = unique_ptr<BaseAST>($5);
+	  $$ = ast;
+	} | IF '(' Exp ')' MatchedStmt ELSE OpenStmt {
+	  auto ast = new OpenStmtAST();
+	  ast->type = 1;
+	  ast->exp = unique_ptr<BaseAST>($3);
+	  ast->m_stmt = unique_ptr<BaseAST>($5);
+	  ast->o_stmt = unique_ptr<BaseAST>($7);
+	  $$ = ast;
+	}
+	;
+
 Exp
 	: LOrExp {
 	  auto ast = new ExpAST();
