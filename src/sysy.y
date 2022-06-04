@@ -20,7 +20,7 @@ using namespace std;
 
 /*
 因为容易忘记所有的语法，所以记录在这里
-CompUnit      ::= FuncDef;
+CompUnit      ::= [CompUnit] FuncDef;
 
 Decl          ::= ConstDecl | VarDecl;
 ConstDecl     ::= "const" BType ConstDef {"," ConstDef} ";";
@@ -31,8 +31,10 @@ VarDecl		  ::= BType VarDef {"," VarDef} ";";
 VarDef        ::= IDENT | IDENT "=" InitVal;
 InitVal       ::= Exp;
 
-FuncDef       ::= FuncType IDENT "(" ")" Block;
-FuncType      ::= "int";
+FuncDef       ::= FuncType IDENT "(" [FuncFParams] ")" Block;
+FuncType      ::= "void" | "int";
+FuncFParams   ::= FuncFParam {"," FuncFParam};
+FuncFParam	  ::= BType IDENT;	
 
 Block         ::= "{" BlockItems "}";
 BlockItems    ::= BlockItem BlockItems | null;
@@ -45,7 +47,8 @@ Exp			  ::= LOrExp;
 LVal          ::= IDENT;
 PrimaryExp	  ::= "(" Exp ")" | LVal | Number;
 Number	      ::= INT_CONST;
-UnaryExp      ::= PrimaryExp | UnaryOp UnaryExp;
+UnaryExp      ::= PrimaryExp | UnaryOp UnaryExp | IDENT "(" [FuncRParam] ")";
+FuncRParam   ::= Exp {"," Exp};
 UnaryOp       ::= "+" | "-" | "!";
 MulExp        ::= UnaryExp | MulExp ("*" | "/" | "%") UnaryExp;
 AddExp        ::= MulExp | AddExp ("+" | "-") MulExp;
@@ -68,20 +71,35 @@ ConstExp      ::= Exp;
 }
 
 // lexer返回的所有token类型
-%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
+%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE VOID
 %token <str_val> IDENT RelOp EqOp AndOp OrOp
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt MatchedStmt OpenStmt Number Exp PrimaryExp UnaryExp AddExp MulExp RelExp EqExp LAndExp LOrExp Decl ConstDecl BType ConstDef  ConstDefs ConstInitVal BlockItems BlockItem LVal ConstExp VarDecl VarDefs VarDef InitVal
+%type <ast_val> CompUnit FuncDef FuncType Block Stmt MatchedStmt OpenStmt Number Exp PrimaryExp UnaryExp AddExp MulExp RelExp EqExp LAndExp LOrExp
+%type <ast_val> Decl ConstDecl BType ConstDef  ConstDefs ConstInitVal BlockItems BlockItem LVal ConstExp VarDecl VarDefs VarDef InitVal
+%type <ast_val> FuncFParams FuncFParam FuncRParam 
 
 %%
+PreComp
+	: CompUnit {
+	  auto pre_comp = make_unique<PreCompAST>();
+	  pre_comp->comp_unit = unique_ptr<BaseAST>($1);
+	  ast = move(pre_comp);
+	}
+	;
 
 CompUnit
 	: FuncDef {
-	  auto comp_unit = make_unique<CompUnitAST>();
-	  comp_unit->func_def = unique_ptr<BaseAST>($1);
-	  ast = move(comp_unit);
+	  auto ast = new CompUnitAST();
+	  ast->func_def = unique_ptr<BaseAST>($1);
+	  ast->exist = 0;
+	  $$ = ast;
+	} | CompUnit FuncDef {
+	  auto ast = new CompUnitAST();
+	  ast->comp = unique_ptr<BaseAST>($1);
+	  ast->func_def = unique_ptr<BaseAST>($2);
+	  $$ = ast;
 	}
 	;
 
@@ -194,8 +212,16 @@ FuncDef
 	: FuncType IDENT '(' ')' Block {
 		auto ast = new FuncDefAST();
 		ast->func_type = unique_ptr<BaseAST>($1);
-		ast->ident = *unique_ptr<string>($2);
+		ast->ident = *($2);
 		ast->block = unique_ptr<BaseAST>($5);
+		$$ = ast;
+	} | FuncType IDENT '(' FuncFParams ')' Block {
+		auto ast = new FuncDefAST();
+		ast->func_type = unique_ptr<BaseAST>($1);
+		ast->ident = *($2);
+		ast->fparams = unique_ptr<BaseAST>($4);
+		ast->block = unique_ptr<BaseAST>($6);
+		ast->param_exist = 1;
 		$$ = ast;
 	}
 	;
@@ -203,6 +229,34 @@ FuncDef
 FuncType
 	: INT {
 	  auto ast = new FuncTypeAST();
+	  ast->type = "int";
+	  $$ = ast;
+	} | VOID {
+	  auto ast = new FuncTypeAST();
+	  ast->type = "void";
+	  $$ = ast;
+	}
+	;
+
+FuncFParams
+	: FuncFParam {
+	  auto ast = new FuncFParamsAST();
+	  ast->exist = 0;
+	  ast->fparam = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | FuncFParam ',' FuncFParams {
+	  auto ast = new FuncFParamsAST();
+	  ast->fparam = unique_ptr<BaseAST>($1);
+	  ast->fparams = unique_ptr<BaseAST>($3);
+	  $$ = ast;
+	}
+	;
+
+FuncFParam
+	: BType IDENT {
+	  auto ast = new FuncFParamAST();
+	  ast->ident = *($2);
+	  ast->btype = unique_ptr<BaseAST>($1);
 	  $$ = ast;
 	}
 	;
@@ -375,6 +429,32 @@ UnaryExp
 	  auto ast = new UnaryExpAST();
 	  ast->unaryop = "!";
 	  ast->u_exp = unique_ptr<BaseAST>($2);
+	  $$ = ast;
+	} | IDENT '(' ')'{
+	  auto ast = new UnaryExpAST();
+	  ast->unaryop = "Func0";
+	  ast->ident = *($1);
+	  ast->exist = 0;
+	  $$ = ast;
+	} | IDENT '(' FuncRParam ')' {
+	  auto ast = new UnaryExpAST();
+	  ast->unaryop = "Func1";
+	  ast->ident = *($1);
+	  ast->rparam = unique_ptr<BaseAST>($3);
+	  $$ = ast;
+	}
+	;
+
+FuncRParam
+	: Exp {
+	  auto ast = new FuncRParamAST();
+	  ast->exist = 0;
+	  ast->exp = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | Exp ',' FuncRParam {
+	  auto ast = new FuncRParamAST();
+	  ast->exp = unique_ptr<BaseAST>($1);
+	  ast->rparam = unique_ptr<BaseAST>($3);
 	  $$ = ast;
 	}
 	;

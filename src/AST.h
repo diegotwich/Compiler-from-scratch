@@ -20,7 +20,7 @@ static int retcnt = 0;
 typedef struct {
 	std::string name;
 	int value, status, cnt;
-	// status = 0为变量，=1为常量
+	// status = 0为变量，=1为常量, =2为函数
 	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
 	bool init;
 }Symbol;
@@ -235,12 +235,37 @@ public:
 	virtual SymbolList* FindSym() const = 0;
 };
 
+class PreCompAST : public BaseAST {
+public:
+	std::unique_ptr<BaseAST> comp_unit;
+	Dumpret Dump() const override {
+		AddBlock(); // 全局作用域
+		comp_unit->Dump();
+		DeleteBlock();
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
+	}
+	int Calc() const override {
+
+		return -1;
+	}
+	SymbolList* FindSym() const override {
+
+		return NULL;
+	}
+};
+
 class CompUnitAST : public BaseAST {
 public:
+	bool exist = 1;
+	std::unique_ptr<BaseAST> comp;
 	std::unique_ptr<BaseAST> func_def;
 
 	Dumpret Dump() const override {
 		// std::cout << "CompUnitAST { ";
+		Debug();
+		if(exist) comp->Dump();
 		func_def->Dump();
 		// std::cout << " }";
 		Dumpret tmp;
@@ -480,9 +505,11 @@ public:
 
 class FuncDefAST : public BaseAST {
 public:
+	bool param_exist = 0;
 	std::unique_ptr<BaseAST> func_type;
 	std::string ident;
 	std::unique_ptr<BaseAST> block;
+	std::unique_ptr<BaseAST> fparams;
 
 	Dumpret Dump() const override {
 		// std::cout << "FuncDefAST { ";
@@ -490,10 +517,20 @@ public:
 		// std::cout << ", " << ident << ", ";
 		// block->Dump();
 		// std::cout << " }";
-		std::cout << "fun @" << ident << "(): ";
-		func_type->Dump();
-		block->Dump();
-		std::cout << "}";
+		InsertSymbol(ident, 0, 2, 1);
+		std::cout << "fun @" << ident << "(";
+		AddBlock();
+		if (param_exist) fparams->Calc();
+		std::cout << "): ";
+		Dumpret funcret = func_type->Dump();
+		if (param_exist)fparams->Dump();
+		Dumpret blkret = block->Dump();
+		DeleteBlock();
+		if (blkret.type != 2) {
+			assert(funcret.type == -3);
+			std::cout << "  ret" << std::endl;
+		}
+		std::cout << "}" << std::endl << std::endl;
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
@@ -511,12 +548,18 @@ public:
 
 class FuncTypeAST : public BaseAST {
 public:
-
+	std::string type;
 	Dumpret Dump() const override {
 		// std::cout << "FuncTypeAST { " << INT << " }";
-		std::cout << "i32 " << "{" << std::endl << "%entry:" << std::endl;
 		Dumpret tmp;
-		tmp.type = 1;
+		if (type == "int") {
+			std::cout << "i32 " << "{" << std::endl << "%entry:" << std::endl;
+			tmp.type = -2;
+		}
+		else if (type == "void") {
+			std::cout << "{" << std::endl << "%entry:" << std::endl;
+			tmp.type = -3;
+		}
 		return tmp;
 	}
 
@@ -530,6 +573,56 @@ public:
 	}
 };
 
+class FuncFParamsAST : public BaseAST {
+public:
+	bool exist = 1;
+	std::unique_ptr<BaseAST> fparam;
+	std::unique_ptr<BaseAST> fparams;
+	Dumpret Dump() const override {
+		fparam->Dump();
+		if (exist) fparams->Dump();
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
+	}
+	int Calc() const override {
+		fparam->Calc();
+		if (exist) {
+			std::cout << ", ";
+			fparams->Calc();
+		}
+		return -1;
+	}
+	SymbolList* FindSym() const override {
+
+		return NULL;
+	}
+};
+
+class FuncFParamAST : public BaseAST {
+public:
+	std::string ident;
+	std::unique_ptr<BaseAST> btype;
+	Dumpret Dump() const override {
+		Symbol sym = InsertSymbol(ident, 0, 0, 1);
+		if (sym.status != -1) {
+			std::cout << "  %" << ident << "_" << sym.cnt << " = alloc i32" << std::endl;
+		}
+		std::cout << "  store @" << ident << ", " << "%" << ident << "_" << sym.cnt << std::endl;
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
+	}
+	int Calc() const override {
+		std::cout << "@" << ident << ": i32";
+		return -1;
+	}
+	SymbolList* FindSym() const override {
+
+		return NULL;
+	}
+};
+
 class BlockAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> block_items;
@@ -538,9 +631,7 @@ public:
 		// std::cout << "Block { ";
 		// stmt->Dump();
 		// std::cout << " }";
-		AddBlock();
 		Dumpret tmp = block_items->Dump();
-		DeleteBlock();
 		return tmp;
 	}
 
@@ -694,8 +785,17 @@ public:
 			tmp->sym.value = exp->Calc();
 			tmp->sym.init = 1;
 		}
+		else if (type == 2) { // Exp;
+			if (exist) return exp->Dump();
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
+		}
 		else if (type == 3) { // Block
-			return exp->Dump();
+			AddBlock();
+			Dumpret tmp = exp->Dump();
+			DeleteBlock();
+			return tmp;
 		}
 		else if (type == 4) { // IF ELSE
 			int iftag = ifnow;
@@ -852,10 +952,19 @@ public:
 
 class UnaryExpAST : public BaseAST {
 public:
+	bool exist = 1;
 	std::string unaryop;
+	std::string ident;
 	std::unique_ptr<BaseAST> u_exp;
+	std::unique_ptr<BaseAST> rparam;
 	Dumpret Dump() const override {
-		Dumpret dret = u_exp->Dump();
+		Dumpret dret;
+		if (unaryop != "Func0" && unaryop != "Func1") {
+			dret = u_exp->Dump();
+		}
+		else {
+			dret.type = 1;
+		}
 		char tmp = unaryop[0];
 		if (tmp == '-') {
 			if (dret.type != 0) {
@@ -883,6 +992,17 @@ public:
 			tmp.type = 1;
 			return tmp;
 		}
+		if (unaryop == "Func0") { // void function
+			std::cout << "  call @" << ident << "(";
+			if (exist) rparam->Dump();
+			std::cout << ")" << std::endl;
+		}
+		else if (unaryop == "Func1") { // int function
+			std::cout << "  %" << now << " = call @" << ident << "(";
+			now++;
+			if (exist)rparam->Dump();
+			std::cout << ")" << std::endl;
+		}
 		return dret;
 	}
 	
@@ -896,6 +1016,36 @@ public:
 		return u_exp->Calc();
 	}
 	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class FuncRParamAST : public BaseAST {
+public:
+	bool exist = 1;
+	std::unique_ptr<BaseAST> exp;
+	std::unique_ptr<BaseAST> rparam;
+	Dumpret Dump() const override {
+		Dumpret tmp = exp->Dump();
+		if (tmp.type != 0) {
+			std::cout << "%" << now - 1;
+		}
+		else {
+			std::cout << tmp.value;
+		}
+		if (exist) {
+			std::cout << ", ";
+			tmp = rparam->Dump();
+		}
+		tmp.type = 1;
+		return tmp;
+	}
+	int Calc() const override {
+
+		return -1;
+	}
+	SymbolList* FindSym() const override {
 
 		return NULL;
 	}
