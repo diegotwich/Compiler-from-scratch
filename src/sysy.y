@@ -39,7 +39,7 @@ BlockItems    ::= BlockItem BlockItems | null;
 BlockItem     ::= Decl | Stmt;
 
 Stmt		  ::= MatchedStmt | OpenStmt;
-MatchedStmt   ::= LVal "=" Exp ";" | [Exp] | Block | "return" [Exp] ";" | "if" "(" Exp ")" "else" MatchedStmt;
+MatchedStmt   ::= LVal "=" Exp ";" | [Exp] | Block | "return" [Exp] ";" | "if" "(" Exp ")" "else" MatchedStmt | "while" "(" Exp ")" Stmt;
 OpenStmt	  ::= "if" "(" Exp ")" Stmt | "if" "(" Exp ")" MatchedStmt "else" OpenStmt;
 Exp			  ::= LOrExp;
 LVal          ::= IDENT;
@@ -68,7 +68,7 @@ ConstExp      ::= Exp;
 }
 
 // lexer返回的所有token类型
-%token INT RETURN CONST IF ELSE
+%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
 %token <str_val> IDENT RelOp EqOp AndOp OrOp
 %token <int_val> INT_CONST
 
@@ -290,6 +290,20 @@ MatchedStmt
 	  ast->exp = unique_ptr<BaseAST>($3);
 	  ast->l_val = unique_ptr<BaseAST>($5);
 	  ast->m_stmt = unique_ptr<BaseAST>($7);
+	  $$ = ast;
+	} | WHILE '(' Exp ')' Stmt {
+	  auto ast = new MatchedStmtAST();
+	  ast->type = 5;
+	  ast->exp = unique_ptr<BaseAST>($3);
+	  ast->l_val = unique_ptr<BaseAST>($5);
+	  $$ = ast;
+	} | BREAK ';' {
+	  auto ast = new MatchedStmtAST();
+	  ast->type = 6;
+	  $$ = ast;
+	} | CONTINUE ';' {
+	  auto ast = new MatchedStmtAST();
+	  ast->type = 7;
 	  $$ = ast;
 	}
 	;

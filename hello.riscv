@@ -1,159 +1,32 @@
   .text
   .global main
 main:
-  addi  sp, sp, -160
+  addi  sp, sp, -16
 
 entry:
-  li    t1, 1
-  add   t0, x0, t1
-  sw    t0, 0(sp)
+  li    a0, 0
+  sw    a0, 0(sp)
+  j     while_entry0
+
+while_entry0:
   lw    a0, 0(sp)
   sw    a0, 4(sp)
-  add   t0, x0, x0
+  lw    t0, 4(sp)
+  li    t1, 10
+  slt   t0, t0, t1
   sw    t0, 8(sp)
-  lw    t0, 8(sp)
-  or    t0, t0, x0
-  sw    t0, 12(sp)
-  lw    t0, 12(sp)
-  xor   t0, t0, x0
-  snez  t0, t0
-  sw    t0, 16(sp)
-  lw    a0, 16(sp)
-  sw    a0, 20(sp)
-  li    t1, 1
-  xor   t0, x0, t1
-  snez  t0, t0
-  sw    t0, 24(sp)
-  xor   t0, x0, x0
-  snez  t0, t0
-  sw    t0, 28(sp)
-  lw    t0, 28(sp)
-  lw    t1, 24(sp)
-  and   t0, t0, t1
-  sw    t0, 32(sp)
-  lw    t0, 32(sp)
-  li    t1, 1
-  or    t0, t0, t1
-  sw    t0, 36(sp)
-  lw    t0, 36(sp)
-  xor   t0, t0, x0
-  snez  t0, t0
-  sw    t0, 40(sp)
-  lw    t0, 40(sp)
-  li    t1, 4
-  mul   t0, t0, t1
-  sw    t0, 44(sp)
-  lw    a0, 44(sp)
-  sw    a0, 48(sp)
-  li    a0, 5
-  sw    a0, 52(sp)
-  lw    a0, 4(sp)
-  sw    a0, 56(sp)
-  lw    t0, 56(sp)
-  li    t1, 1
-  xor   t0, t0, t1
-  seqz  t0, t0
-  sw    t0, 60(sp)
-  li    t1, 1
-  add   t0, x0, t1
-  sw    t0, 64(sp)
-  lw    a0, 64(sp)
-  bnez  a0, then0
-  j     end0
+  lw    a0, 8(sp)
+  bnez  a0, while_body0
+  j     while_end0
 
-then0:
-  j     end0
+while_body0:
+  li    a0, 20
+  sw    a0, 0(sp)
+  j     while_entry0
 
-end0:
-  lw    a0, 20(sp)
-  sw    a0, 68(sp)
-  lw    t0, 68(sp)
-  xor   t0, t0, x0
-  seqz  t0, t0
-  sw    t0, 72(sp)
-  li    t1, 1
-  add   t0, x0, t1
-  sw    t0, 76(sp)
-  lw    a0, 76(sp)
-  bnez  a0, then1
-  j     else1
-
-then1:
-  lw    a0, 52(sp)
-  sw    a0, 80(sp)
-  lw    t0, 80(sp)
-  li    t1, 1
-  add   t0, t0, t1
-  sw    t0, 84(sp)
-  lw    a0, 84(sp)
-  sw    a0, 52(sp)
-  j     end1
-
-else1:
-  j     end1
-
-end1:
-  lw    a0, 4(sp)
-  sw    a0, 88(sp)
-  lw    a0, 20(sp)
-  sw    a0, 92(sp)
-  lw    t1, 88(sp)
-  xor   t0, x0, t1
-  snez  t0, t0
-  sw    t0, 96(sp)
-  lw    t1, 92(sp)
-  xor   t0, x0, t1
-  snez  t0, t0
-  sw    t0, 100(sp)
-  lw    t0, 100(sp)
-  lw    t1, 96(sp)
-  and   t0, t0, t1
-  sw    t0, 104(sp)
-  lw    a0, 48(sp)
-  sw    a0, 108(sp)
-  lw    a0, 52(sp)
-  sw    a0, 112(sp)
-  lw    t1, 108(sp)
-  xor   t0, x0, t1
-  snez  t0, t0
-  sw    t0, 116(sp)
-  lw    t1, 112(sp)
-  xor   t0, x0, t1
-  snez  t0, t0
-  sw    t0, 120(sp)
-  lw    t0, 120(sp)
-  lw    t1, 116(sp)
-  and   t0, t0, t1
-  sw    t0, 124(sp)
-  lw    t0, 104(sp)
-  lw    t1, 124(sp)
-  or    t0, t0, t1
-  sw    t0, 128(sp)
-  lw    t0, 128(sp)
-  xor   t0, t0, x0
-  snez  t0, t0
-  sw    t0, 132(sp)
-  lw    a0, 132(sp)
-  bnez  a0, then2
-  j     end2
-
-then2:
-  lw    a0, 52(sp)
-  sw    a0, 136(sp)
-  lw    t0, 136(sp)
-  li    t1, 1
-  add   t0, t0, t1
-  sw    t0, 140(sp)
-  lw    a0, 140(sp)
-  sw    a0, 52(sp)
-  j     end2
-
-end2:
-  lw    a0, 52(sp)
-  sw    a0, 144(sp)
-  li    t1, 1
-  add   t0, x0, t1
-  sw    t0, 148(sp)
-  lw    a0, 148(sp)
-  addi  sp, sp, 160
+while_end0:
+  lw    a0, 0(sp)
+  sw    a0, 12(sp)
+  lw    a0, 12(sp)
+  addi  sp, sp, 16
   ret

@@ -11,6 +11,9 @@ static int now = 0;
 // if else分支个数
 static int ifnow = 0;
 
+// while个数
+static int whilenow = 0;
+
 // 解决连续多个return问题
 static int retcnt = 0;
 
@@ -21,6 +24,14 @@ typedef struct {
 	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
 	bool init;
 }Symbol;
+
+// 记录最内层的while循环
+struct whileList{
+	int tag;
+	whileList* next;
+};
+
+static whileList* whilelist = NULL;
 
 // Dump的返回值，前面几个lv因为这个全部有大问题
 typedef struct {
@@ -40,6 +51,43 @@ struct BlockSymList {
 
 static BlockSymList* nowBlock = NULL;
 static SymbolList* allSymbol = NULL; // 所有已使用符号的名称，用来判断是否还需要分配空间
+
+inline void whileInsert(int tag) {
+	if (whilelist == NULL) {
+		whilelist = new whileList;
+		whilelist->next = NULL;
+		whilelist->tag = tag;
+	}
+	else {
+		whileList* tmp = whilelist;
+		while (tmp->next != NULL) {
+			tmp = tmp->next;
+		}
+		whileList* p = new whileList;
+		p->next = NULL;
+		p->tag = tag;
+		tmp->next = p;
+	}
+	return;
+}
+
+inline void whileDelete(int tag) {
+	assert(whilelist != NULL);
+	whileList* tmp = whilelist;
+	if (tmp->next == NULL) {
+		delete whilelist;
+		whilelist = NULL;
+	}
+	else {
+		while (tmp->next->next != NULL) {
+			tmp = tmp->next;
+		}
+		assert(tmp->next->tag == tag);
+		delete tmp->next;
+		tmp->next = NULL;
+	}
+	return;
+}
 
 inline void Debug() {
 	/* 设置断点专用函数,debug */
@@ -521,6 +569,12 @@ public:
 				std::cout << std::endl << "%afret" << retcnt << ":" << std::endl;
 				retcnt++;
 			}
+			else if (tmp1.type == 6 || tmp1.type == 7) {
+				if (rett == 1) { // break和continue后紧跟语句
+					std::cout << std::endl << "%afret" << retcnt << ":" << std::endl;
+					retcnt++;
+				}
+			}
 			tmp2 = block_items->Dump();
 		}
 		else {
@@ -654,13 +708,54 @@ public:
 				std::cout << "  br " << dret.value << ", %then" << iftag << ", %else" << iftag << std::endl;
 			}
 			std::cout << std::endl << "%then" << iftag << ":" << std::endl;
-			Debug();
 			Dumpret dret1 = l_val->Dump();
-			if(dret1.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+			if(dret1.type != 2 && dret1.type != 6 && dret1.type != 7) std::cout << "  jump %end" << iftag << std::endl;
 			std::cout << std::endl << "%else" << iftag << ":" << std::endl;
 			Dumpret dret2 = m_stmt->Dump();
-			if(dret2.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+			if(dret2.type != 2 && dret2.type != 6 && dret2.type != 7) std::cout << "  jump %end" << iftag << std::endl;
 			std::cout << std::endl << "%end" << iftag << ":" << std::endl;
+		}
+		else if (type == 5) { // While
+			Debug();
+			int whiletag = whilenow;
+			whileInsert(whiletag);
+			whilenow++;
+			std::cout << "  jump %while_entry" << whiletag << std::endl;
+			std::cout << std::endl << "%while_entry" << whiletag << ":" << std::endl;
+			Dumpret dret = exp->Dump();
+			if (dret.type != 0) {
+				std::cout << "  br %" << now - 1 << ", %while_body" << whiletag << ", " << "%while_end" << whiletag << std::endl;
+			}
+			else {
+				std::cout << "  br " << dret.value << ", %while_body" << whiletag << ", " << "%while_end" << whiletag << std::endl;
+			}
+			std::cout << std::endl << "%while_body" << whiletag << ":" << std::endl;
+			Dumpret bodyret = l_val->Dump();
+			if (bodyret.type != 2 && bodyret.type != 6 && bodyret.type != 7) {
+				std::cout << "  jump %while_entry" << whiletag << std::endl;
+			}
+			whileDelete(whiletag);
+			std::cout << std::endl << "%while_end" << whiletag << ":" << std::endl;
+		}
+		else if (type == 6) { // BREAK
+			whileList* tmp = whilelist;
+			while (tmp->next != NULL) {
+				tmp = tmp->next;
+			}
+			std::cout << "  jump %while_end" << tmp->tag << std::endl;
+			Dumpret tt;
+			tt.type = 6;
+			return tt;
+		}
+		else if (type == 7) { // CONTINUE
+			whileList* tmp = whilelist;
+			while (tmp->next != NULL) {
+				tmp = tmp->next;
+			}
+			std::cout << "  jump %while_entry" << tmp->tag << std::endl;
+			Dumpret tt;
+			tt.type = 7;
+			return tt;
 		}
 		Dumpret tmp;
 		tmp.type = 1;
@@ -701,11 +796,11 @@ public:
 		}
 		std::cout << std::endl << "%then" << iftag << ":" << std::endl;
 		Dumpret dret1 = m_stmt->Dump();
-		if(dret1.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+		if(dret1.type != 2 && dret1.type != 6 && dret1.type != 7) std::cout << "  jump %end" << iftag << std::endl;
 		if (type) {
 			std::cout << std::endl << "%else" << iftag << ":" << std::endl;
 			Dumpret dret2 = o_stmt->Dump();
-			if(dret2.type != 2) std::cout << "  jump %end" << iftag << std::endl;
+			if(dret2.type != 2 && dret2.type != 6 && dret2.type != 7) std::cout << "  jump %end" << iftag << std::endl;
 		}
 		std::cout << std::endl << "%end" << iftag << ":" << std::endl;
 		Dumpret tmp;
@@ -1098,10 +1193,9 @@ public:
 	std::unique_ptr<BaseAST> la_exp;
 	Dumpret Dump() const override {
 		if (andop == "&&") {
-			Debug();
 			Dumpret laret = la_exp->Dump();
 			int lhs = la_exp->Calc();
-			if (lhs != 0) {
+			if (lhs != 0 || laret.type != 0) {
 				if (laret.type != 0) {
 					int tnow = now - 1;
 					Dumpret eret = e_exp->Dump();
@@ -1162,7 +1256,7 @@ public:
 		if (orop == "||") {
 			Dumpret loret = lo_exp->Dump();
 			int lhs = lo_exp->Calc();
-			if (lhs == 0) {
+			if (lhs == 0 || loret.type != 0) {
 				if (loret.type != 0) {
 					int tnow = now - 1;
 					Dumpret laret = la_exp->Dump();
