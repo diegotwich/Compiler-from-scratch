@@ -34,10 +34,16 @@ struct whileList{
 static whileList* whilelist = NULL;
 
 // Dump的返回值，前面几个lv因为这个全部有大问题
-typedef struct {
+struct ParamList{
+	int now, type;
+	ParamList* next;
+};
+
+struct Dumpret{
 	int type;
 	int value;
-}Dumpret;
+	ParamList* first = NULL;
+};
 
 struct SymbolList{
 	Symbol sym;
@@ -145,32 +151,14 @@ inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
 		assert(p->sym.name != s); //重定义
 		p = p->next;
 	}
-	// 找到目前是第几个同名变量
-	BlockSymList* blockt = nowBlock->father;
-	int cnt = 1;
-	bool ok = 0;
-	while (!ok && blockt != NULL) {
-		p = blockt->symlist;
-		while (p != NULL) {
-			if (p->sym.name == s) {
-				cnt = p->sym.cnt + 1;
-				ok = 1;
-				break;
-			}
-			p = p->next;
-		}
-		blockt = blockt->father;
-	}
 
-	// 判断以前是否使用过了这个名字，若使用过了则不需要alloc
-	bool used = 0;
+	// 判断以前是否使用过了这个名字，若使用过了则加一
+	int cnt = 1;
 	SymbolList* atmp = allSymbol;
 	while (atmp != NULL) {
 		if (atmp->sym.name == s) {
-			if (atmp->sym.cnt >= cnt) {
-				used = 1; // 用过了
-			}
-			atmp->sym.cnt = atmp->sym.cnt > cnt ? atmp->sym.cnt : cnt;
+			atmp->sym.cnt = atmp->sym.cnt + 1;
+			cnt = atmp->sym.cnt;
 			break;
 		}
 		atmp = atmp->next;
@@ -205,7 +193,6 @@ inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
 		nowBlock->symlist->sym.init = init;
 		nowBlock->symlist->sym.cnt = cnt;
 		Symbol stmp = nowBlock->symlist->sym;
-		if (used) stmp.status = -1;
 		return stmp;
 	}
 	else {
@@ -219,7 +206,6 @@ inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
 		tmp->sym.cnt = cnt;
 		p->next = tmp;
 		Symbol stmp = tmp->sym;
-		if (used) stmp.status = -1;
 		return stmp;
 	}
 }
@@ -464,14 +450,14 @@ public:
 	Dumpret Dump() const override {
 		auto val = initialized ? init_val->Calc() : 0;
 		Symbol sym = InsertSymbol(name, val, 0, initialized);
-		if(sym.status != -1) std::cout << "  @" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
+		if(sym.status != -1) std::cout << "  %" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
 		if (initialized) {
 			Dumpret dret = init_val->Dump();
 			if (dret.type != 0) {
-				std::cout << "  store %" << now - 1 << ", @" << name << "_" << sym.cnt << std::endl;
+				std::cout << "  store %" << now - 1 << ", %" << name << "_" << sym.cnt << std::endl;
 			}
 			else {
-				std::cout << "  store " << dret.value << ", @" << name << "_" << sym.cnt << std::endl;
+				std::cout << "  store " << dret.value << ", %" << name << "_" << sym.cnt << std::endl;
 			}
 		}
 		Dumpret tmp;
@@ -538,7 +524,7 @@ public:
 
 	int Calc() const override {
 
-		return -1;
+		return block->Calc();
 	}
 	SymbolList* FindSym() const override{
 
@@ -637,7 +623,7 @@ public:
 
 	int Calc() const override {
 
-		return -1;
+		return block_items->Calc();
 	}
 	SymbolList* FindSym() const override{
 
@@ -679,7 +665,6 @@ public:
 		return 0;
 	}
 	SymbolList* FindSym() const override{
-
 		return NULL;
 	}
 };
@@ -693,7 +678,7 @@ public:
 	}
 	int Calc() const override {
 		
-		return -1;
+		return bi_ptr->Calc();
 	}
 	SymbolList* FindSym() const override{
 
@@ -736,7 +721,7 @@ public:
 		 
 	}
 	int Calc() const override {
-		return -1;
+		return stmt->Calc();
 	}
 	SymbolList* FindSym() const override {
 		return NULL;
@@ -777,10 +762,10 @@ public:
 			assert(tmp->sym.status == 0); // 向常量赋值则错误
 			Dumpret dret = exp->Dump();
 			if (dret.type != 0) {
-				std::cout << "  store %" << now - 1 << ", @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+				std::cout << "  store %" << now - 1 << ", %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			}
 			else {
-				std::cout << "  store " << dret.value << ", @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+				std::cout << "  store " << dret.value << ", %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			}
 			tmp->sym.value = exp->Calc();
 			tmp->sym.init = 1;
@@ -863,7 +848,7 @@ public:
 	}
 	
 	int Calc() const override {
-
+		if (type == 1) return exp->Calc();
 		return -1;
 	}
 	SymbolList* FindSym() const override{
@@ -958,6 +943,7 @@ public:
 	std::unique_ptr<BaseAST> u_exp;
 	std::unique_ptr<BaseAST> rparam;
 	Dumpret Dump() const override {
+		Debug();
 		Dumpret dret;
 		if (unaryop != "Func0" && unaryop != "Func1") {
 			dret = u_exp->Dump();
@@ -993,14 +979,46 @@ public:
 			return tmp;
 		}
 		if (unaryop == "Func0") { // void function
+			Dumpret tmp;
+			if (exist) tmp = rparam->Dump();
 			std::cout << "  call @" << ident << "(";
-			if (exist) rparam->Dump();
+			bool ok = 0;
+			ParamList* p = tmp.first;
+			while (p != NULL) {
+				if (ok) {
+					std::cout << ", ";
+				};
+				if (p->type != 0) {
+					std::cout << "%" << p->now;
+				}
+				else {
+					std::cout << p->now;
+				}
+				ok = 1;
+				p = p->next;
+			}
 			std::cout << ")" << std::endl;
 		}
 		else if (unaryop == "Func1") { // int function
+			Dumpret tmp;
+			if (exist) tmp = rparam->Dump();
 			std::cout << "  %" << now << " = call @" << ident << "(";
 			now++;
-			if (exist)rparam->Dump();
+			bool ok = 0;
+			ParamList* p = tmp.first;
+			while (p != NULL) {
+				if (ok) {
+					std::cout << ", ";
+				};
+				if (p->type != 0) {
+					std::cout << "%" << p->now;
+				}
+				else {
+					std::cout << p->now;
+				}
+				ok = 1;
+				p = p->next;
+			}
 			std::cout << ")" << std::endl;
 		}
 		return dret;
@@ -1012,6 +1030,9 @@ public:
 		}
 		else if (unaryop[0] == '!') {
 			return !u_exp->Calc();
+		}
+		else if (unaryop == "Func1" || unaryop == "Func2") {
+			return -1;
 		}
 		return u_exp->Calc();
 	}
@@ -1028,15 +1049,19 @@ public:
 	std::unique_ptr<BaseAST> rparam;
 	Dumpret Dump() const override {
 		Dumpret tmp = exp->Dump();
-		if (tmp.type != 0) {
-			std::cout << "%" << now - 1;
-		}
-		else {
-			std::cout << tmp.value;
+		if (tmp.first == NULL) {
+			tmp.first = new ParamList;
+			tmp.first->next = NULL;
+			tmp.first->type = tmp.type;
+			if (tmp.type != 0) {
+				tmp.first->now = now - 1;
+			}
+			else {
+				tmp.first->now = tmp.value;
+			}
 		}
 		if (exist) {
-			std::cout << ", ";
-			tmp = rparam->Dump();
+			tmp.first->next = rparam->Dump().first;
 		}
 		tmp.type = 1;
 		return tmp;
