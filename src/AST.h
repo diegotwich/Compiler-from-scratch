@@ -264,7 +264,7 @@ public:
 
 	Dumpret Dump() const override {
 		// std::cout << "CompUnitAST { ";
-		Debug();
+		// Debug();
 		if(exist) comp->Dump();
 		func_def->Dump();
 		// std::cout << " }";
@@ -521,7 +521,7 @@ public:
 		std::cout << "fun @" << ident << "(";
 		AddBlock();
 		if (param_exist) fparams->Calc();
-		std::cout << "): ";
+		std::cout << ")";
 		Dumpret funcret = func_type->Dump();
 		if (param_exist)fparams->Dump();
 		Dumpret blkret = block->Dump();
@@ -553,11 +553,11 @@ public:
 		// std::cout << "FuncTypeAST { " << INT << " }";
 		Dumpret tmp;
 		if (type == "int") {
-			std::cout << "i32 " << "{" << std::endl << "%entry:" << std::endl;
+			std::cout << ": i32 " << "{" << std::endl << "%entry:" << std::endl;
 			tmp.type = -2;
 		}
 		else if (type == "void") {
-			std::cout << "{" << std::endl << "%entry:" << std::endl;
+			std::cout << " {" << std::endl << "%entry:" << std::endl;
 			tmp.type = -3;
 		}
 		return tmp;
@@ -713,7 +713,7 @@ public:
 			return p;
 		}
 		else {
-			std::cout << "  %" << now << " = load @" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+			std::cout << "  %" << now << " = load %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			now++;
 			Dumpret tmp;
 			tmp.type = 1;
@@ -816,7 +816,7 @@ public:
 			std::cout << std::endl << "%end" << iftag << ":" << std::endl;
 		}
 		else if (type == 5) { // While
-			Debug();
+			// Debug();
 			int whiletag = whilenow;
 			whileInsert(whiletag);
 			whilenow++;

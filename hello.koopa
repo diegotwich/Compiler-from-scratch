@@ -2,12 +2,12 @@ fun @half(@x: i32): i32 {
 %entry:
   %x_1 = alloc i32
   store @x, %x_1
-  %0 = load @x_1
+  %0 = load %x_1
   %1 = div %0, 2
   ret %1
 }
 
-fun @f(): {
+fun @f() {
 %entry:
   ret
 }

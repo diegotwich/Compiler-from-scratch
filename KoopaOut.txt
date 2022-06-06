@@ -1,103 +1,22 @@
+fun @half(@x: i32): i32 {
+%entry:
+  %x_1 = alloc i32
+  store @x, %x_1
+  %0 = load %x_1
+  %1 = div %0, 2
+  ret %1
+}
+
+fun @f() {
+%entry:
+  ret
+}
+
 fun @main(): i32 {
 %entry:
-  jump %while_entry0
-
-%while_entry0:
-  br 1, %while_body0, %while_end0
-
-%while_body0:
-  @a_1 = alloc i32
-  store 1, @a_1
-  @b_1 = alloc i32
-  store 2, @b_1
-  %0 = load @a_1
-  %1 = eq %0, 1
-  br %1, %then0, %else0
-
-%then0:
-  jump %while_entry1
-
-%while_entry1:
-  %2 = load @a_1
-  %3 = load @b_1
-  %4 = lt %2, %3
-  br %4, %while_body1, %while_end1
-
-%while_body1:
-  jump %while_entry2
-
-%while_entry2:
-  %5 = load @a_1
-  %6 = load @b_1
-  %7 = lt %5, %6
-  %8 = load @b_1
-  %9 = sub %8, 1
-  %10 = eq %9, 0
-  %11 = or %7, %10
-  %12 = ne %11, 0
-  br %12, %while_body2, %while_end2
-
-%while_body2:
-  %13 = load @a_1
-  %14 = add %13, 1
-  store %14, @a_1
-  jump %while_entry2
-
-%while_end2:
-  store 1, @b_1
-  %15 = load @a_1
-  %16 = add %15, 1
-  store %16, @a_1
-  br 3, %then1, %end1
-
-%then1:
-  jump %while_entry1
-
-%end1:
-  jump %while_entry1
-
-%while_end1:
-  jump %end0
-
-%else0:
-  %17 = load @b_1
-  %18 = eq %17, 6
-  br %18, %then2, %end2
-
-%then2:
-  jump %while_end0
-
-%end2:
-  jump %end0
-
-%end0:
-  @b_2 = alloc i32
-  store 6, @b_2
-  %19 = load @b_2
-  %20 = eq %19, 6
-  br %20, %then3, %else3
-
-%then3:
-  %21 = add 0, 1
-  %22 = mul 8, %21
-  ret %22
-
-%else3:
-  jump %while_entry3
-
-%while_entry3:
-  br 0, %while_body3, %while_end3
-
-%while_body3:
-  jump %while_entry3
-
-%while_end3:
-  jump %end3
-
-%end3:
-  jump %while_entry0
-
-%while_end0:
-  %23 = sub 0, 1
-  ret %23
+  call @f()
+  %2 = call @half(10)
+  ret %2
 }
+
+
