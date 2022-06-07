@@ -20,21 +20,22 @@ using namespace std;
 
 /*
 因为容易忘记所有的语法，所以记录在这里
-CompUnit      ::= [CompUnit] FuncDef;
+CompUnit      ::= [CompUnit] (Decl | FuncDef);
+
+变量的type和函数的type有移进规约冲突，合并：
+Type		  ::= "int" | "void"
 
 Decl          ::= ConstDecl | VarDecl;
-ConstDecl     ::= "const" BType ConstDef {"," ConstDef} ";";
-BType         ::= "int";
+ConstDecl     ::= "const" Type ConstDef {"," ConstDef} ";";
 ConstDef      ::= IDENT "=" ConstInitVal;
 ConstInitVal  ::= ConstExp;
-VarDecl		  ::= BType VarDef {"," VarDef} ";";
+VarDecl		  ::= Type VarDef {"," VarDef} ";";
 VarDef        ::= IDENT | IDENT "=" InitVal;
 InitVal       ::= Exp;
 
 FuncDef       ::= FuncType IDENT "(" [FuncFParams] ")" Block;
-FuncType      ::= "void" | "int";
 FuncFParams   ::= FuncFParam {"," FuncFParam};
-FuncFParam	  ::= BType IDENT;	
+FuncFParam	  ::= Type IDENT;	
 
 Block         ::= "{" BlockItems "}";
 BlockItems    ::= BlockItem BlockItems | null;
@@ -76,8 +77,8 @@ ConstExp      ::= Exp;
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> CompUnit FuncDef FuncType Block Stmt MatchedStmt OpenStmt Number Exp PrimaryExp UnaryExp AddExp MulExp RelExp EqExp LAndExp LOrExp
-%type <ast_val> Decl ConstDecl BType ConstDef  ConstDefs ConstInitVal BlockItems BlockItem LVal ConstExp VarDecl VarDefs VarDef InitVal
+%type <ast_val> CompUnit FuncDef Type Block Stmt MatchedStmt OpenStmt Number Exp PrimaryExp UnaryExp AddExp MulExp RelExp EqExp LAndExp LOrExp
+%type <ast_val> Decl ConstDecl ConstDef  ConstDefs ConstInitVal BlockItems BlockItem LVal ConstExp VarDecl VarDefs VarDef InitVal
 %type <ast_val> FuncFParams FuncFParam FuncRParam 
 
 %%
@@ -100,6 +101,16 @@ CompUnit
 	  ast->comp = unique_ptr<BaseAST>($1);
 	  ast->func_def = unique_ptr<BaseAST>($2);
 	  $$ = ast;
+	} | Decl {
+	  auto ast = new CompUnitAST();
+	  ast->func_def = unique_ptr<BaseAST>($1);
+	  ast->exist = 0;
+	  $$ = ast;
+	} | CompUnit Decl{
+	  auto ast = new CompUnitAST();
+	  ast->comp = unique_ptr<BaseAST>($1);
+	  ast->func_def = unique_ptr<BaseAST>($2);
+	  $$ = ast;
 	}
 	;
 
@@ -116,19 +127,23 @@ Decl
 	;
 
 ConstDecl
-	: CONST BType ConstDef ConstDefs ';' {
+	: CONST Type ConstDef ConstDefs ';' {
 	  auto ast = new ConstDeclAST();
-	  ast->btype = unique_ptr<BaseAST>($2);
+	  ast->type = unique_ptr<BaseAST>($2);
 	  ast->const_def = unique_ptr<BaseAST>($3);
 	  ast->const_defs = unique_ptr<BaseAST>($4);
 	  $$ = ast;
 	}
 	;
 
-BType
+Type
 	: INT {
-	  auto ast = new BTypeAST();
+	  auto ast = new TypeAST();
 	  ast->type = "int";
+	  $$ = ast;
+	} | VOID {
+	  auto ast = new TypeAST();
+	  ast->type = "void";
 	  $$ = ast;
 	}
 	;
@@ -164,9 +179,9 @@ ConstInitVal
 	;
 
 VarDecl
-	: BType VarDef VarDefs ';' {
+	: Type VarDef VarDefs ';' {
 	  auto ast = new VarDeclAST();
-	  ast->btype = unique_ptr<BaseAST>($1);
+	  ast->type = unique_ptr<BaseAST>($1);
 	  ast->var_def = unique_ptr<BaseAST>($2);
 	  ast->var_defs = unique_ptr<BaseAST>($3);
 	  $$ = ast;
@@ -209,32 +224,20 @@ InitVal
 	;
 
 FuncDef
-	: FuncType IDENT '(' ')' Block {
+	: Type IDENT '(' ')' Block {
 		auto ast = new FuncDefAST();
-		ast->func_type = unique_ptr<BaseAST>($1);
+		ast->type = unique_ptr<BaseAST>($1);
 		ast->ident = *($2);
 		ast->block = unique_ptr<BaseAST>($5);
 		$$ = ast;
-	} | FuncType IDENT '(' FuncFParams ')' Block {
+	} | Type IDENT '(' FuncFParams ')' Block {
 		auto ast = new FuncDefAST();
-		ast->func_type = unique_ptr<BaseAST>($1);
+		ast->type = unique_ptr<BaseAST>($1);
 		ast->ident = *($2);
 		ast->fparams = unique_ptr<BaseAST>($4);
 		ast->block = unique_ptr<BaseAST>($6);
 		ast->param_exist = 1;
 		$$ = ast;
-	}
-	;
-
-FuncType
-	: INT {
-	  auto ast = new FuncTypeAST();
-	  ast->type = "int";
-	  $$ = ast;
-	} | VOID {
-	  auto ast = new FuncTypeAST();
-	  ast->type = "void";
-	  $$ = ast;
 	}
 	;
 
@@ -253,10 +256,10 @@ FuncFParams
 	;
 
 FuncFParam
-	: BType IDENT {
+	: Type IDENT {
 	  auto ast = new FuncFParamAST();
 	  ast->ident = *($2);
-	  ast->btype = unique_ptr<BaseAST>($1);
+	  ast->type = unique_ptr<BaseAST>($1);
 	  $$ = ast;
 	}
 	;
@@ -434,7 +437,6 @@ UnaryExp
 	  auto ast = new UnaryExpAST();
 	  ast->unaryop = "Func0";
 	  ast->ident = *($1);
-	  ast->exist = 0;
 	  $$ = ast;
 	} | IDENT '(' FuncRParam ')' {
 	  auto ast = new UnaryExpAST();

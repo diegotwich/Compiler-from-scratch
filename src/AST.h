@@ -20,7 +20,7 @@ static int retcnt = 0;
 typedef struct {
 	std::string name;
 	int value, status, cnt;
-	// status = 0为变量，=1为常量, =2为函数
+	// status = 0为变量，=1为常量, =-1为void函数，=-2为int函数
 	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
 	bool init;
 }Symbol;
@@ -57,6 +57,59 @@ struct BlockSymList {
 
 static BlockSymList* nowBlock = NULL;
 static SymbolList* allSymbol = NULL; // 所有已使用符号的名称，用来判断是否还需要分配空间
+
+// Calc的返回值，主要是加入函数后需要额外信息判断是否为return语句
+
+struct Calcret {
+	int type, value;
+};
+
+// 记录只会返回常值的Function（内部有if不行，返回值与变量有关也不行）
+
+struct FuncValue {
+	std::string name;
+	int ret_value;
+};
+
+struct FuncList {
+	FuncValue val;
+	FuncList* next;
+};
+
+static FuncList* funclist = NULL;
+
+inline FuncValue FuncListInsert(std::string name, int value) {
+	if (funclist == NULL) {
+		funclist = new FuncList;
+		funclist->val.name = name;
+		funclist->val.ret_value = value;
+		funclist->next = NULL;
+		return funclist->val;
+	}
+	else {
+		FuncList* tmp = funclist;
+		while (tmp->next != NULL) {
+			tmp = tmp->next;
+		}
+		FuncList* p = new FuncList;
+		p->next = NULL;
+		p->val.name = name;
+		p->val.ret_value = value;
+		tmp->next = p;
+		return p->val;
+	}
+}
+
+inline FuncList* FuncListFind(std::string name) {
+	FuncList* tmp = funclist;
+	while (tmp != NULL) {
+		if (tmp->val.name == name) {
+			break;
+		}
+		tmp = tmp->next;
+	}
+	return tmp;
+}
 
 inline void whileInsert(int tag) {
 	if (whilelist == NULL) {
@@ -136,16 +189,13 @@ inline SymbolList* FindSymbolValue(std::string s) {
 		}
 		blockt = blockt->father;
 	}
+	std::cout << s << std::endl;
 	assert(blockt != NULL);
 	return NULL;
 }
 
 inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
-	if (nowBlock == NULL) {
-		nowBlock = new BlockSymList;
-		nowBlock->father = NULL;
-		nowBlock->symlist = NULL;
-	}
+	assert(nowBlock != NULL);
 	SymbolList* p = nowBlock->symlist;
 	while (p != NULL) {
 		assert(p->sym.name != s); //重定义
@@ -216,7 +266,7 @@ public:
 
 	virtual Dumpret Dump() const = 0;
 
-	virtual int Calc() const = 0;
+	virtual Calcret Calc() const = 0;
 
 	virtual SymbolList* FindSym() const = 0;
 };
@@ -225,16 +275,33 @@ class PreCompAST : public BaseAST {
 public:
 	std::unique_ptr<BaseAST> comp_unit;
 	Dumpret Dump() const override {
+		std::cout << "decl @getint(): i32" << std::endl;
+		std::cout << "decl @getch(): i32" << std::endl;
+		std::cout << "decl @getarray(*i32): i32" << std::endl;
+		std::cout << "decl @putint(i32)" << std::endl;
+		std::cout << "decl @putch(i32)" << std::endl;
+		std::cout << "decl @putarray(i32, *i32)" << std::endl;
+		std::cout << "decl @starttime()" << std::endl;
+		std::cout << "decl @stoptime()" << std::endl << std::endl;
 		AddBlock(); // 全局作用域
+		InsertSymbol("getint", 0, -2, 1);
+		InsertSymbol("getch", 0, -2, 1);
+		InsertSymbol("getarray", 0, -2, 1);
+		InsertSymbol("putint", 0, -1, 1);
+		InsertSymbol("putch", 0, -1, 1);
+		InsertSymbol("putarray", 0, -1, 1);
+		InsertSymbol("starttime", 0, -1, 1);
+		InsertSymbol("stoptime", 0, -1, 1);
 		comp_unit->Dump();
 		DeleteBlock();
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override {
 
@@ -259,9 +326,10 @@ public:
 		return tmp;
 	}
 
-	int Calc() const override {
-		
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -280,9 +348,10 @@ public:
 		return tmp;
 	}
 
-	int Calc() const override {
-		
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -292,20 +361,21 @@ public:
 
 class ConstDeclAST : public BaseAST {
 public:
-	std::unique_ptr<BaseAST> btype;
+	std::unique_ptr<BaseAST> type;
 	std::unique_ptr<BaseAST> const_def;
 	std::unique_ptr<BaseAST> const_defs;
 	Dumpret Dump() const override {
-		btype->Dump();
+		// type->Dump();
 		const_def->Dump();
 		const_defs->Dump();
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -313,18 +383,27 @@ public:
 	}
 };
 
-class BTypeAST : public BaseAST {
+class TypeAST : public BaseAST {
 public:
 	std::string type;
 	Dumpret Dump() const override {
 		// std::cout << type;
 		Dumpret tmp;
 		tmp.type = 1;
+		if (type == "int") {
+			std::cout << ": i32 " << "{" << std::endl << "%entry:" << std::endl;
+			tmp.type = -2;
+		}
+		else if (type == "void") {
+			std::cout << " {" << std::endl << "%entry:" << std::endl;
+			tmp.type = -3;
+		}
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -346,9 +425,10 @@ public:
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -361,15 +441,16 @@ public:
 	std::string name;
 	std::unique_ptr<BaseAST> const_init_val;
 	Dumpret Dump() const override {
-		auto val = const_init_val->Calc();
+		auto val = const_init_val->Calc().value;
 		InsertSymbol(name, val, 1, 1);
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -386,7 +467,7 @@ public:
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
+	Calcret Calc() const override {
 		return const_exp->Calc();
 	}
 	SymbolList* FindSym() const override{
@@ -397,20 +478,22 @@ public:
 
 class VarDeclAST : public BaseAST {
 public:
-	std::unique_ptr<BaseAST> btype;
+	std::unique_ptr<BaseAST> type;
 	std::unique_ptr<BaseAST> var_def;
 	std::unique_ptr<BaseAST> var_defs;
 	Dumpret Dump() const override {
-		btype->Dump();
+		// type->Dump();
+		Debug();
 		var_def->Dump();
 		var_defs->Dump();
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-		
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -432,9 +515,10 @@ public:
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -448,25 +532,33 @@ public:
 	std::string name;
 	std::unique_ptr<BaseAST> init_val;
 	Dumpret Dump() const override {
-		auto val = initialized ? init_val->Calc() : 0;
-		Symbol sym = InsertSymbol(name, val, 0, initialized);
-		if(sym.status != -1) std::cout << "  %" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
-		if (initialized) {
-			Dumpret dret = init_val->Dump();
-			if (dret.type != 0) {
-				std::cout << "  store %" << now - 1 << ", %" << name << "_" << sym.cnt << std::endl;
-			}
-			else {
-				std::cout << "  store " << dret.value << ", %" << name << "_" << sym.cnt << std::endl;
+		if (nowBlock->father == NULL) { // 全局变量
+			auto val = initialized ? init_val->Calc().value : 0;
+			Symbol sym = InsertSymbol(name, val, 0, initialized);
+			std::cout << "global %" << name << "_" << sym.cnt << " = alloc i32, " << val << std::endl << std::endl;
+		}
+		else {
+			auto val = initialized ? init_val->Calc().value : 0;
+			Symbol sym = InsertSymbol(name, val, 0, initialized);
+			std::cout << "  %" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
+			if (initialized) {
+				Dumpret dret = init_val->Dump();
+				if (dret.type != 0) {
+					std::cout << "  store %" << now - 1 << ", %" << name << "_" << sym.cnt << std::endl;
+				}
+				else {
+					std::cout << "  store " << dret.value << ", %" << name << "_" << sym.cnt << std::endl;
+				}
 			}
 		}
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -480,7 +572,7 @@ public:
 	Dumpret Dump() const override {
 		return exp->Dump();
 	}
-	int Calc() const override {
+	Calcret Calc() const override {
 		return exp->Calc();
 	}
 	SymbolList* FindSym() const override{
@@ -492,25 +584,31 @@ public:
 class FuncDefAST : public BaseAST {
 public:
 	bool param_exist = 0;
-	std::unique_ptr<BaseAST> func_type;
+	std::unique_ptr<BaseAST> type;
 	std::string ident;
 	std::unique_ptr<BaseAST> block;
 	std::unique_ptr<BaseAST> fparams;
 
 	Dumpret Dump() const override {
 		// std::cout << "FuncDefAST { ";
-		// func_type->Dump();
+		// type->Dump();
 		// std::cout << ", " << ident << ", ";
 		// block->Dump();
 		// std::cout << " }";
-		InsertSymbol(ident, 0, 2, 1);
 		std::cout << "fun @" << ident << "(";
-		AddBlock();
 		if (param_exist) fparams->Calc();
 		std::cout << ")";
-		Dumpret funcret = func_type->Dump();
+		Dumpret funcret = type->Dump();
+		if (funcret.type == -3) {
+			InsertSymbol(ident, 0, -1, 1);
+		}
+		else if (funcret.type == -2) {
+			InsertSymbol(ident, 0, -2, 1);
+		}
+		AddBlock();
 		if (param_exist)fparams->Dump();
 		Dumpret blkret = block->Dump();
+		this->Calc();
 		DeleteBlock();
 		if (blkret.type != 2) {
 			assert(funcret.type == -3);
@@ -522,9 +620,12 @@ public:
 		return tmp;
 	}
 
-	int Calc() const override {
-
-		return block->Calc();
+	Calcret Calc() const override {
+		Calcret tmp = block->Calc();
+		if (tmp.type == 0) {
+			FuncListInsert(ident, tmp.value);
+		}
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -532,19 +633,25 @@ public:
 	}
 };
 
+/*
+由于移进规约冲突，FuncType和Btype合并
 class FuncTypeAST : public BaseAST {
 public:
+	int status; // = 0变量类型， = 1函数类型
 	std::string type;
 	Dumpret Dump() const override {
 		// std::cout << "FuncTypeAST { " << INT << " }";
 		Dumpret tmp;
-		if (type == "int") {
-			std::cout << ": i32 " << "{" << std::endl << "%entry:" << std::endl;
-			tmp.type = -2;
-		}
-		else if (type == "void") {
-			std::cout << " {" << std::endl << "%entry:" << std::endl;
-			tmp.type = -3;
+		tmp.type = 1;
+		if (status == 1) {
+			if (type == "int") {
+				std::cout << ": i32 " << "{" << std::endl << "%entry:" << std::endl;
+				tmp.type = -2;
+			}
+			else if (type == "void") {
+				std::cout << " {" << std::endl << "%entry:" << std::endl;
+				tmp.type = -3;
+			}
 		}
 		return tmp;
 	}
@@ -559,6 +666,7 @@ public:
 	}
 };
 
+*/
 class FuncFParamsAST : public BaseAST {
 public:
 	bool exist = 1;
@@ -571,13 +679,15 @@ public:
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
+	Calcret Calc() const override {
 		fparam->Calc();
 		if (exist) {
 			std::cout << ", ";
 			fparams->Calc();
 		}
-		return -1;
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override {
 
@@ -588,7 +698,7 @@ public:
 class FuncFParamAST : public BaseAST {
 public:
 	std::string ident;
-	std::unique_ptr<BaseAST> btype;
+	std::unique_ptr<BaseAST> type;
 	Dumpret Dump() const override {
 		Symbol sym = InsertSymbol(ident, 0, 0, 1);
 		if (sym.status != -1) {
@@ -599,9 +709,11 @@ public:
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
+	Calcret Calc() const override {
 		std::cout << "@" << ident << ": i32";
-		return -1;
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override {
 
@@ -621,7 +733,7 @@ public:
 		return tmp;
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
 
 		return block_items->Calc();
 	}
@@ -641,8 +753,8 @@ public:
 		Dumpret tmp1, tmp2;
 		if (exist) {
 			tmp1 = block_item->Dump();
-			int rett = block_items->Calc();
-			if (tmp1.type == 2 && rett == 1) { // return后紧跟语句
+			int rett = block_items->FindSym()->sym.status;
+			if (tmp1.type == 2 && rett != -1) { // return后紧跟语句
 				std::cout << std::endl << "%afret" << retcnt << ":" << std::endl;
 				retcnt++;
 			}
@@ -660,12 +772,30 @@ public:
 		}
 		return tmp2.type == -1 ? tmp1 : tmp2;
 	}
-	int Calc() const override {
-		if (exist) return 1;
-		return 0;
+	Calcret Calc() const override {
+		Calcret tmp;
+		if (exist) {
+			tmp.type = 1;
+			Calcret itm = block_item->Calc();
+			Calcret itms = block_items->Calc();
+			if (itm.type == 2 && itms.type != 2) { // 单return
+				tmp = itm;
+				tmp.type = 0;
+			}
+			else {
+				tmp = itms;
+				tmp.type = tmp.type > itm.type ? tmp.type : itm.type;
+			}
+			return tmp;
+		}
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
-		return NULL;
+		SymbolList* tmp = new SymbolList;
+		if (exist) tmp->sym.status = 1;
+		else tmp->sym.status = -1;
+		return tmp;
 	}
 };
 
@@ -676,7 +806,7 @@ public:
 		
 		return bi_ptr->Dump();
 	}
-	int Calc() const override {
+	Calcret Calc() const override {
 		
 		return bi_ptr->Calc();
 	}
@@ -705,8 +835,12 @@ public:
 			return tmp;
 		}
 	}
-	int Calc() const override {
-		return FindSymbolValue(name)->sym.value;
+	Calcret Calc() const override {
+		Calcret tmp;
+		SymbolList* pt = FindSymbolValue(name);
+		tmp.type = pt->sym.status == 1 ? 0 : 1;
+		tmp.value = pt->sym.value;
+		return tmp;
 	}
 	SymbolList* FindSym() const override {
 		return FindSymbolValue(name);
@@ -720,7 +854,7 @@ public:
 		return stmt->Dump();
 		 
 	}
-	int Calc() const override {
+	Calcret Calc() const override {
 		return stmt->Calc();
 	}
 	SymbolList* FindSym() const override {
@@ -767,7 +901,7 @@ public:
 			else {
 				std::cout << "  store " << dret.value << ", %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			}
-			tmp->sym.value = exp->Calc();
+			tmp->sym.value = exp->Calc().value;
 			tmp->sym.init = 1;
 		}
 		else if (type == 2) { // Exp;
@@ -847,9 +981,15 @@ public:
 		return tmp;
 	}
 	
-	int Calc() const override {
-		if (type == 1) return exp->Calc();
-		return -1;
+	Calcret Calc() const override {
+		if (type == 1) {
+			Calcret tmp = exp->Calc();
+			if(tmp.type == 0) tmp.type = 2; // 返回值为常量的函数
+			return tmp;
+		}
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
@@ -892,9 +1032,10 @@ public:
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override {
 
@@ -910,7 +1051,7 @@ public:
 		return lorexp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
 		return lorexp->Calc();
 	}
 	SymbolList* FindSym() const override{
@@ -926,7 +1067,7 @@ public:
 		return p_exp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
 		return p_exp->Calc();
 	}
 	SymbolList* FindSym() const override{
@@ -937,13 +1078,11 @@ public:
 
 class UnaryExpAST : public BaseAST {
 public:
-	bool exist = 1;
 	std::string unaryop;
 	std::string ident;
 	std::unique_ptr<BaseAST> u_exp;
 	std::unique_ptr<BaseAST> rparam;
 	Dumpret Dump() const override {
-		Debug();
 		Dumpret dret;
 		if (unaryop != "Func0" && unaryop != "Func1") {
 			dret = u_exp->Dump();
@@ -978,32 +1117,27 @@ public:
 			tmp.type = 1;
 			return tmp;
 		}
-		if (unaryop == "Func0") { // void function
+		if (unaryop == "Func0") { // no param function
 			Dumpret tmp;
-			if (exist) tmp = rparam->Dump();
-			std::cout << "  call @" << ident << "(";
-			bool ok = 0;
-			ParamList* p = tmp.first;
-			while (p != NULL) {
-				if (ok) {
-					std::cout << ", ";
-				};
-				if (p->type != 0) {
-					std::cout << "%" << p->now;
-				}
-				else {
-					std::cout << p->now;
-				}
-				ok = 1;
-				p = p->next;
+			SymbolList* funcsym = FindSymbolValue(ident);
+			if (funcsym->sym.status == -1) {
+				std::cout << "  call @" << ident << "()" << std::endl;
 			}
-			std::cout << ")" << std::endl;
+			else {
+				std::cout << "  %" << now << " = call @" << ident << "()" << std::endl;
+				now++;
+			}
 		}
-		else if (unaryop == "Func1") { // int function
-			Dumpret tmp;
-			if (exist) tmp = rparam->Dump();
-			std::cout << "  %" << now << " = call @" << ident << "(";
-			now++;
+		else if (unaryop == "Func1") { // function with params
+			Dumpret tmp = rparam->Dump();
+			SymbolList* funcsym = FindSymbolValue(ident);
+			if (funcsym->sym.status == -2) {
+				std::cout << "  %" << now << " = call @" << ident << "(";
+				now++;
+			}
+			else {
+				std::cout << "  call @" << ident << "(";
+			}
 			bool ok = 0;
 			ParamList* p = tmp.first;
 			while (p != NULL) {
@@ -1024,17 +1158,29 @@ public:
 		return dret;
 	}
 	
-	int Calc() const override {
-		if (unaryop[0] == '-') {
-			return -u_exp->Calc();
+	Calcret Calc() const override {
+		if (unaryop == "Func0" || unaryop == "Func1") {
+			FuncList* tmp = FuncListFind(ident);
+			Calcret ctmp;
+			if (tmp != NULL) {
+				ctmp.type = 0;
+				ctmp.value = tmp->val.ret_value;
+			}
+			else {
+				ctmp.type = 2;
+			}
+			return ctmp;
 		}
-		else if (unaryop[0] == '!') {
-			return !u_exp->Calc();
+		else {
+			Calcret tmp = u_exp->Calc();
+			if (unaryop[0] == '-') {
+				tmp.value = -tmp.value;
+			}
+			else if (unaryop[0] == '!') {
+				tmp.value = !tmp.value;
+			}
+			return tmp;
 		}
-		else if (unaryop == "Func1" || unaryop == "Func2") {
-			return -1;
-		}
-		return u_exp->Calc();
 	}
 	SymbolList* FindSym() const override{
 
@@ -1066,9 +1212,10 @@ public:
 		tmp.type = 1;
 		return tmp;
 	}
-	int Calc() const override {
-
-		return -1;
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
 	}
 	SymbolList* FindSym() const override {
 
@@ -1132,17 +1279,29 @@ public:
 		return u_exp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
+		Calcret l;
 		if (mulop[0] == '*') {
-			return m_exp->Calc() * u_exp->Calc();
+			l = m_exp->Calc();
+			Calcret r = u_exp->Calc();
+			l.value = l.value * r.value;
 		}
 		else if (mulop[0] == '/') {
-			return m_exp->Calc() / u_exp->Calc();
+			l = m_exp->Calc();
+			Calcret r = u_exp->Calc();
+			if (r.value != 0) {
+				l.value = l.value / r.value;
+			}
 		}
 		else if (mulop[0] == '%') {
-			return m_exp->Calc() % u_exp->Calc();
+			l = m_exp->Calc();
+			Calcret r = u_exp->Calc();
+			l.value = l.value % r.value;
 		}
-		return u_exp->Calc();
+		else {
+			l = u_exp->Calc();
+		}
+		return l;
 	}
 	SymbolList* FindSym() const override{
 
@@ -1200,14 +1359,22 @@ public:
 		return m_exp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
+		Calcret l;
 		if (addop[0] == '+') {
-			return a_exp->Calc() + m_exp->Calc();
+			l = a_exp->Calc();
+			Calcret r = m_exp->Calc();
+			l.value = l.value + r.value;
 		}
 		else if (addop[0] == '-') {
-			return a_exp->Calc() - m_exp->Calc();
+			l = a_exp->Calc();
+			Calcret r = m_exp->Calc();
+			l.value = l.value - r.value;
 		}
-		return m_exp->Calc();
+		else {
+			l = m_exp->Calc();
+		}
+		return l;
 	}
 	SymbolList* FindSym() const override{
 
@@ -1276,20 +1443,32 @@ public:
 		return a_exp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
+		Calcret l;
 		if (relop == "<") {
-			return r_exp->Calc() < a_exp->Calc();
+			l = r_exp->Calc();
+			Calcret r = a_exp->Calc();
+			l.value = l.value < r.value;
 		}
 		else if (relop == ">") {
-			return r_exp->Calc() > a_exp->Calc();
+			l = r_exp->Calc();
+			Calcret r = a_exp->Calc();
+			l.value = l.value > r.value;
 		}
 		else if (relop == "<=") {
-			return r_exp->Calc() <= a_exp->Calc();
+			l = r_exp->Calc();
+			Calcret r = a_exp->Calc();
+			l.value = l.value <= r.value;
 		}
 		else if (relop == ">=") {
-			return r_exp->Calc() >= a_exp->Calc();
+			l = r_exp->Calc();
+			Calcret r = a_exp->Calc();
+			l.value = l.value >= r.value;
 		}
-		return a_exp->Calc();
+		else {
+			l = a_exp->Calc();
+		}
+		return l;
 	}
 	SymbolList* FindSym() const override{
 
@@ -1346,14 +1525,22 @@ public:
 		return r_exp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
+		Calcret l;
 		if (eqop == "==") {
-			return e_exp->Calc() == r_exp->Calc();
+			l = e_exp->Calc();
+			Calcret r = r_exp->Calc();
+			l.value = l.value == r.value;
 		}
 		else if (eqop == "!=") {
-			return e_exp->Calc() != r_exp->Calc();
+			l = e_exp->Calc();
+			Calcret r = r_exp->Calc();
+			l.value = l.value != r.value;
 		}
-		return r_exp->Calc();
+		else {
+			l = r_exp->Calc();
+		}
+		return l;
 	}
 	SymbolList* FindSym() const override{
 
@@ -1369,8 +1556,8 @@ public:
 	Dumpret Dump() const override {
 		if (andop == "&&") {
 			Dumpret laret = la_exp->Dump();
-			int lhs = la_exp->Calc();
-			if (lhs != 0 || laret.type != 0) {
+			Calcret lhs = la_exp->Calc();
+			if (lhs.value != 0 || lhs.type != 0) { // 如果是常值（与变量无关）或者是单值返回的函数，则可以短路处理
 				if (laret.type != 0) {
 					int tnow = now - 1;
 					Dumpret eret = e_exp->Dump();
@@ -1410,11 +1597,17 @@ public:
 		return e_exp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
+		Calcret l;
 		if (andop == "&&") {
-			return la_exp->Calc() && e_exp->Calc();
+			l = la_exp->Calc();
+			Calcret r = e_exp->Calc();
+			l.value = l.value && r.value;
 		}
-		return e_exp->Calc();
+		else {
+			l = e_exp->Calc();
+		}
+		return l;
 	}
 	SymbolList* FindSym() const override{
 
@@ -1430,8 +1623,8 @@ public:
 	Dumpret Dump() const override {
 		if (orop == "||") {
 			Dumpret loret = lo_exp->Dump();
-			int lhs = lo_exp->Calc();
-			if (lhs == 0 || loret.type != 0) {
+			Calcret lhs = lo_exp->Calc();
+			if (lhs.value == 0 || lhs.type != 0) {
 				if (loret.type != 0) {
 					int tnow = now - 1;
 					Dumpret laret = la_exp->Dump();
@@ -1469,11 +1662,17 @@ public:
 		return la_exp->Dump();
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
+		Calcret l;
 		if (orop == "||") {
-			return la_exp->Calc() || lo_exp->Calc();
+			l = la_exp->Calc();
+			Calcret r = lo_exp->Calc();
+			l.value = l.value || r.value;
 		}
-		return la_exp->Calc();
+		else {
+			l = la_exp->Calc();
+		}
+		return l;
 	}
 	SymbolList* FindSym() const override{
 
@@ -1491,7 +1690,7 @@ public:
 		return tmp;
 	}
 
-	int Calc() const override {
+	Calcret Calc() const override {
 		return c_exp->Calc();
 	}
 	SymbolList* FindSym() const override{
@@ -1512,8 +1711,11 @@ public:
 		return tmp;
 	}
 
-	int Calc() const override {
-		return atoi(IntConst.c_str());
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.value = atoi(IntConst.c_str());
+		tmp.type = 0;
+		return tmp;
 	}
 	SymbolList* FindSym() const override{
 
