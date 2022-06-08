@@ -17,10 +17,14 @@ static int whilenow = 0;
 // 解决连续多个return问题
 static int retcnt = 0;
 
+// 用于处理多维数组的初始化
+static int* len;
+static int dim;
+
 typedef struct {
 	std::string name;
 	int value, status, cnt;
-	// status = 0为变量，=1为常量, =-1为void函数，=-2为int函数
+	// status = 0为变量，=1为常量, =-1为void函数，=-2为int函数 = 2数组
 	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
 	bool init;
 }Symbol;
@@ -33,12 +37,13 @@ struct whileList{
 
 static whileList* whilelist = NULL;
 
-// Dump的返回值，前面几个lv因为这个全部有大问题
+// 参数的列表,在初始化数组时也有用到
 struct ParamList{
 	int now, type;
 	ParamList* next;
 };
 
+// Dump的返回值，前面几个lv因为这个全部有大问题
 struct Dumpret{
 	int type;
 	int value;
@@ -438,11 +443,58 @@ public:
 
 class ConstDefAST : public BaseAST {
 public:
+	bool is_array = 0;
 	std::string name;
 	std::unique_ptr<BaseAST> const_init_val;
+	std::unique_ptr<BaseAST> const_exp;
+	std::unique_ptr<BaseAST> const_exps;
 	Dumpret Dump() const override {
-		auto val = const_init_val->Calc().value;
-		InsertSymbol(name, val, 1, 1);
+		if (is_array == 0) {
+			auto val = const_init_val->Calc().value;
+			InsertSymbol(name, val, 1, 1);
+		}
+		else if (nowBlock->father == NULL) { // 全局变量
+			int len = const_exps->Calc().value;
+			Symbol sym = InsertSymbol(name, len, 2, 1);
+			std::cout << "global %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]";
+			std::cout << ", {";
+			Dumpret tmp = const_init_val->Dump();
+			int cnt = 0;
+			while (tmp.first != NULL) {
+				if (cnt) std::cout << ", " << tmp.first->now;
+				else std::cout << tmp.first->now;
+				cnt++;
+				tmp.first = tmp.first->next;
+			}
+			while (cnt < len) {
+				if (cnt) std::cout << ", 0";
+				else std::cout << "0";
+				cnt++;
+			}
+			std::cout << "}";
+			std::cout << std::endl;
+		}
+		else {
+			int len = const_exps->Calc().value;
+			Symbol sym = InsertSymbol(name, len, 2, 1);
+			std::cout << "  %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]" << std::endl;
+			Dumpret tmp = const_init_val->Dump();
+			int cnt = 0;
+			while (tmp.first != NULL) {
+				std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
+				std::cout << "  store " << tmp.first->now << ", %" << now << std::endl;
+				now++;
+				cnt++;
+				tmp.first = tmp.first->next;
+			}
+			while (cnt < len) {
+				std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
+				std::cout << "  store 0, %" << now << std::endl;
+				now++;
+				cnt++;
+			}
+			std::cout << std::endl;
+		}
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
@@ -460,17 +512,83 @@ public:
 
 class ConstInitValAST : public BaseAST {
 public:
+	int exist = 1;
 	std::unique_ptr<BaseAST> const_exp;
+	std::unique_ptr<BaseAST> const_exps;
 	Dumpret Dump() const override {
-		// const_exp->Dump();
 		Dumpret tmp;
 		tmp.type = 1;
+		if (exist == 2) {
+			int val = const_exp->Calc().value;
+			Dumpret tt = const_exps->Dump();
+			tmp.first = new ParamList;
+			tmp.first->next = tt.first;
+			tmp.first->now = val;
+			tmp.type = 8;
+		}
+		else {
+			tmp = const_exp->Dump();
+			tmp.first = NULL;
+		}
 		return tmp;
 	}
 	Calcret Calc() const override {
 		return const_exp->Calc();
 	}
 	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class ConstInitValsAST : public BaseAST {
+public:
+	bool exist = 0;
+	std::unique_ptr<BaseAST> const_init_val;
+	std::unique_ptr<BaseAST> const_init_vals;
+	Dumpret Dump() const override {
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
+	}
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
+	}
+	SymbolList* FindSym() const override {
+
+		return NULL;
+	}
+};
+class ConstExpsAST : public BaseAST {
+public:
+	bool exist = 0;
+	std::unique_ptr<BaseAST> const_exp;
+	std::unique_ptr<BaseAST> const_exps;
+	Dumpret Dump() const override {
+		Dumpret tmp;
+		tmp.type = 1;
+		if (exist) {
+			int val = const_exp->Calc().value;
+			Dumpret tt = const_exps->Dump();
+			tmp.first = new ParamList;
+			tmp.first->next = tt.first;
+			tmp.first->now = val;
+			tmp.type = 8;
+		}
+		else {
+			tmp.value = 0;
+			tmp.first = NULL;
+		}
+		return tmp;
+	}
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
+	}	
+	SymbolList* FindSym() const override {
 
 		return NULL;
 	}
@@ -483,7 +601,6 @@ public:
 	std::unique_ptr<BaseAST> var_defs;
 	Dumpret Dump() const override {
 		// type->Dump();
-		Debug();
 		var_def->Dump();
 		var_defs->Dump();
 		Dumpret tmp;
@@ -528,27 +645,79 @@ public:
 
 class VarDefAST : public BaseAST {
 public:
-	bool initialized = 1; //是否初始化
+	bool initialized = 1, is_array = 0; //是否初始化,是否为数组
 	std::string name;
+	std::unique_ptr<BaseAST> const_exp;
+	std::unique_ptr<BaseAST> const_exps;
 	std::unique_ptr<BaseAST> init_val;
 	Dumpret Dump() const override {
 		if (nowBlock->father == NULL) { // 全局变量
-			auto val = initialized ? init_val->Calc().value : 0;
-			Symbol sym = InsertSymbol(name, val, 0, initialized);
-			std::cout << "global %" << name << "_" << sym.cnt << " = alloc i32, " << val << std::endl << std::endl;
+			if (is_array == 0) {
+				auto val = initialized ? init_val->Calc().value : 0;
+				Symbol sym = InsertSymbol(name, val, 0, initialized);
+				std::cout << "global %" << name << "_" << sym.cnt << " = alloc i32, " << val << std::endl << std::endl;
+			}
+			else {
+				dim = const_exps->Calc().value + 1; // 维度
+				Symbol sym = InsertSymbol(name, len, 2, initialized);
+				std::cout << "global %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]";
+				if (initialized) {
+					std::cout << ", {";
+					Dumpret tmp = init_val->Dump();
+					int cnt = 0;
+					while (tmp.first != NULL) {
+						if (cnt) std::cout << ", " << tmp.first->now;
+						else std::cout << tmp.first->now;
+						cnt++;
+						tmp.first = tmp.first->next;
+					}
+					while (cnt < len) {
+						if (cnt) std::cout << ", 0";
+						else std::cout << "0";
+						cnt++;
+					}
+					std::cout << "}";
+				}
+				std::cout << std::endl << std::endl;
+			}
 		}
 		else {
-			auto val = initialized ? init_val->Calc().value : 0;
-			Symbol sym = InsertSymbol(name, val, 0, initialized);
-			std::cout << "  %" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
-			if (initialized) {
-				Dumpret dret = init_val->Dump();
-				if (dret.type != 0) {
-					std::cout << "  store %" << now - 1 << ", %" << name << "_" << sym.cnt << std::endl;
+			if (is_array == 0) {
+				auto val = initialized ? init_val->Calc().value : 0;
+				Symbol sym = InsertSymbol(name, val, 0, initialized);
+				std::cout << "  %" << name << "_" << sym.cnt << " = alloc i32" << std::endl;
+				if (initialized) {
+					Dumpret dret = init_val->Dump();
+					if (dret.type != 0) {
+						std::cout << "  store %" << now - 1 << ", %" << name << "_" << sym.cnt << std::endl;
+					}
+					else {
+						std::cout << "  store " << dret.value << ", %" << name << "_" << sym.cnt << std::endl;
+					}
 				}
-				else {
-					std::cout << "  store " << dret.value << ", %" << name << "_" << sym.cnt << std::endl;
+			}
+			else {
+				int len = const_exp->Calc().value;
+				Symbol sym = InsertSymbol(name, len, 2, initialized);
+				std::cout << "  %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]" << std::endl;
+				if (initialized) {
+					Dumpret tmp = init_val->Dump();
+					int cnt = 0;
+					while (tmp.first != NULL) {
+						std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
+						std::cout << "  store " << tmp.first->now << ", %" << now << std::endl;
+						now++;
+						cnt++;
+						tmp.first = tmp.first->next;
+					}
+					while (cnt < len) {
+						std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
+						std::cout << "  store 0, %" << now << std::endl;
+						now++;
+						cnt++;
+					}
 				}
+				std::cout << std::endl;
 			}
 		}
 		Dumpret tmp;
@@ -568,14 +737,84 @@ public:
 
 class InitValAST : public BaseAST {
 public:
-	std::unique_ptr<BaseAST> exp;
+	int exist = 1;
+	std::unique_ptr<BaseAST> init_val;
+	std::unique_ptr<BaseAST> init_vals;
 	Dumpret Dump() const override {
-		return exp->Dump();
+		Dumpret tmp;
+		tmp.type = 1;
+		if (exist == 2) {
+			int val = exp->Calc().value;
+			Dumpret tt = exps->Dump();
+			tmp.first = new ParamList;
+			tmp.first->next = tt.first;
+			tmp.first->now = val;
+			tmp.type = 8;
+		}
+		else {
+			tmp = exp->Dump();
+			tmp.first = NULL;
+		}
+		return tmp;
 	}
 	Calcret Calc() const override {
 		return exp->Calc();
 	}
 	SymbolList* FindSym() const override{
+
+		return NULL;
+	}
+};
+
+class InitValsAST : public BaseAST {
+public:
+	bool exist = 0;
+	std::unique_ptr<BaseAST> init_val;
+	std::unique_ptr<BaseAST> init_vals;
+	Dumpret Dump() const override {
+		Dumpret tmp;
+		tmp.type = 1;
+		return tmp;
+	}
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
+	}
+	SymbolList* FindSym() const override {
+
+		return NULL;
+	}
+};
+
+class ExpsAST : public BaseAST {
+public:
+	bool exist = 0;
+	std::unique_ptr<BaseAST> exp;
+	std::unique_ptr<BaseAST> exps;
+	Dumpret Dump() const override {
+		Dumpret tmp;
+		tmp.type = 1;
+		if (exist) {
+			int val = exp->Calc().value;
+			Dumpret tt = exps->Dump();
+			tmp.first = new ParamList;
+			tmp.first->next = tt.first;
+			tmp.first->now = val;
+			tmp.type = 8;
+		}
+		else {
+			tmp.value = 0;
+			tmp.first = NULL;
+		}
+		return tmp;
+	}
+	Calcret Calc() const override {
+		Calcret tmp;
+		tmp.type = -1;
+		return tmp;
+	}
+	SymbolList* FindSym() const override {
 
 		return NULL;
 	}
@@ -818,7 +1057,10 @@ public:
 
 class LValAST : public BaseAST {
 public:
+	bool is_array = 0;
 	std::string name;
+	std::unique_ptr<BaseAST> exp;
+	std::unique_ptr<BaseAST> exps;
 	Dumpret Dump() const override {
 		SymbolList* tmp = FindSymbolValue(name);
 		if (tmp->sym.status == 1) {
@@ -827,8 +1069,18 @@ public:
 			p.value = tmp->sym.value;
 			return p;
 		}
-		else {
+		else if (is_array == 0) {
 			std::cout << "  %" << now << " = load %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+			now++;
+			Dumpret tmp;
+			tmp.type = 1;
+			return tmp;
+		}
+		else {
+			int pos = exp->Calc().value;
+			std::cout << "  %" << now << " = getelemptr %" << tmp->sym.name << "_" << tmp->sym.cnt << ", " << pos << std::endl;
+			now++;
+			std::cout << "  %" << now << " = load %" << now - 1 << std::endl;
 			now++;
 			Dumpret tmp;
 			tmp.type = 1;

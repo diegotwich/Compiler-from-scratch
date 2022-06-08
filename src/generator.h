@@ -80,8 +80,17 @@ InstrLocList* LocInsert(int* addr, int val) {
 	}
 }
 
+int FindAllocMemory(koopa_raw_type_t now) {
+	if (now->tag == KOOPA_RTT_ARRAY) {
+		return now->data.array.len * FindAllocMemory(now->data.array.base);
+	}
+	else if (now->tag == KOOPA_RTT_INT32) {
+		return 4;
+	}
+	return 0;
+}
+
 void parse_str(const char* str) {
-	Debug();
 	// 解析字符串 str, 得到 Koopa IR 程序
 	koopa_program_t program;
 	koopa_error_code_t ret = koopa_parse_from_string(str, &program);
@@ -102,11 +111,27 @@ void parse_str(const char* str) {
 			if (val->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
 				cout << "  .global " << val->name + 1 << endl;
 				cout << val->name + 1 << ":" << endl;
-				if (val->kind.data.global_alloc.init->kind.data.integer.value == 0) {
-					cout << "  .zero 4" << endl;
+				koopa_raw_global_alloc_t initval = val->kind.data.global_alloc;
+				if (initval.init->kind.tag == KOOPA_RVT_INTEGER) {
+					if (initval.init->kind.data.integer.value == 0) {
+						cout << "  .zero 4" << endl;
+					}
+					else {
+						cout << "  .word " << initval.init->kind.data.integer.value << endl;
+					}
 				}
-				else {
-					cout << "  .word " << val->kind.data.global_alloc.init->kind.data.integer.value << endl;
+				else if (initval.init->kind.tag == KOOPA_RVT_AGGREGATE) {
+					koopa_raw_aggregate_t arraytmp = initval.init->kind.data.aggregate;
+					int len = arraytmp.elems.len;
+					for (size_t j = 0; j < len; ++j) {
+						koopa_raw_value_t tt = (koopa_raw_value_t)arraytmp.elems.buffer[j];
+						if (tt->kind.data.integer.value == 0) {
+							cout << "  .zero 4" << endl;
+						}
+						else {
+							cout << "  .word" << tt->kind.data.integer.value << endl;
+						}
+					}
 				}
 				cout << endl;
 			}
@@ -138,6 +163,13 @@ void parse_str(const char* str) {
 					if_call = 1;
 					koopa_raw_call_t val = value->kind.data.call;
 					maxarg = maxarg > val.args.len + 1 ? maxarg : (val.args.len + 1);
+				}
+				else if (value->kind.tag == KOOPA_RVT_AGGREGATE) {
+					if (value->kind.data.aggregate.elems.len) {
+						koopa_raw_value_t val = (koopa_raw_value_t)value->kind.data.aggregate.elems.buffer[0];
+						int ttmp = FindAllocMemory(val->ty);
+						offset += ttmp * value->kind.data.aggregate.elems.len;
+					}
 				}
 			}
 		}
@@ -193,6 +225,7 @@ void parse_str(const char* str) {
 				}
 			}
 			for (size_t k = 0; k < bb->insts.len; ++k) {
+				Debug();
 				koopa_raw_value_t value = (koopa_raw_value_t)bb->insts.buffer[k];
 				// 二元运算
 				if (value->kind.tag == KOOPA_RVT_BINARY) {
@@ -206,7 +239,7 @@ void parse_str(const char* str) {
 						l[0] = 't', l[1] = '0';
 						cout << "  li    " << l << ", " << val.lhs->kind.data.integer.value << endl;
 					}
-					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY || val.lhs->kind.tag == KOOPA_RVT_LOAD || val.lhs->kind.tag == KOOPA_RVT_ALLOC || val.lhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.lhs->kind.tag == KOOPA_RVT_CALL) {
+					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY || val.lhs->kind.tag == KOOPA_RVT_LOAD || val.lhs->kind.tag == KOOPA_RVT_ALLOC || val.lhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.lhs->kind.tag == KOOPA_RVT_CALL || val.lhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 						int loc = LocFind((int*)val.lhs);
 						assert(loc >= 0);
 						if (loc < 2048) {
@@ -231,7 +264,7 @@ void parse_str(const char* str) {
 						r[0] = 't', r[1] = '1';
 						cout << "  li    " << r << ", " << val.rhs->kind.data.integer.value << endl;
 					}
-					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY || val.rhs->kind.tag == KOOPA_RVT_LOAD || val.rhs->kind.tag == KOOPA_RVT_ALLOC || val.rhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.rhs->kind.tag == KOOPA_RVT_CALL) {
+					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY || val.rhs->kind.tag == KOOPA_RVT_LOAD || val.rhs->kind.tag == KOOPA_RVT_ALLOC || val.rhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.rhs->kind.tag == KOOPA_RVT_CALL || val.rhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 						int loc = LocFind((int*)val.rhs);
 						assert(loc >= 0);
 						if (loc < 2048) {
@@ -412,7 +445,7 @@ void parse_str(const char* str) {
 					else if (ret_value->kind.tag == KOOPA_RVT_INTEGER) {
 						cout << "  li    " << "a0, " << ret_value->kind.data.integer.value << endl;
 					}
-					else if (ret_value->kind.tag == KOOPA_RVT_BINARY || ret_value->kind.tag == KOOPA_RVT_LOAD || ret_value->kind.tag == KOOPA_RVT_ALLOC || ret_value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || ret_value->kind.tag == KOOPA_RVT_CALL) {
+					else if (ret_value->kind.tag == KOOPA_RVT_BINARY || ret_value->kind.tag == KOOPA_RVT_LOAD || ret_value->kind.tag == KOOPA_RVT_ALLOC || ret_value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || ret_value->kind.tag == KOOPA_RVT_CALL || ret_value->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 						int tmp = LocFind((int*)ret_value);
 						if (tmp < 2048) {
 							cout << "  lw    a0, " << tmp << "(sp)" << endl;
@@ -455,7 +488,7 @@ void parse_str(const char* str) {
 						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
 							cout << "  sw    t0, " << val.dest->kind.data.integer.value << endl;
 						}
-						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL) {
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL || val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 							int tmp = LocFind((int*)val.dest);
 							if (tmp < 2048) {
 								cout << "  sw    t0, " << tmp << "(sp)" << endl;
@@ -496,7 +529,7 @@ void parse_str(const char* str) {
 							cout << "  sw    t0, 0(t1)" << endl;
 						}
 					}
-					else if (val.value->kind.tag == KOOPA_RVT_BINARY || val.value->kind.tag == KOOPA_RVT_LOAD || val.value->kind.tag == KOOPA_RVT_ALLOC || val.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.value->kind.tag == KOOPA_RVT_CALL) {
+					else if (val.value->kind.tag == KOOPA_RVT_BINARY || val.value->kind.tag == KOOPA_RVT_LOAD || val.value->kind.tag == KOOPA_RVT_ALLOC || val.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.value->kind.tag == KOOPA_RVT_CALL || val.value->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 						int left = LocFind((int*)val.value);
 						assert(left != -1); // ALLOC还未赋值
 						if (left < 2048) {
@@ -510,7 +543,7 @@ void parse_str(const char* str) {
 						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
 							cout << "  sw    t0, " << val.dest->kind.data.integer.value << endl;
 						}
-						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL) {
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL || val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 							int right = LocFind((int*)val.dest);
 							if (right < 2048) {
 								cout << "  sw    t0, " << right << "(sp)" << endl;
@@ -557,7 +590,7 @@ void parse_str(const char* str) {
 						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
 							cout << "  sw    t0, " << val.dest->kind.data.integer.value << endl;
 						}
-						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL) {
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL || val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 							int tmp = LocFind((int*)val.dest);
 							if (tmp < 2048) {
 								cout << "  sw    t0, " << tmp << "(sp)" << endl;
@@ -612,7 +645,7 @@ void parse_str(const char* str) {
 							cout << "  sw    t0, t1" << endl;
 						}
 					}
-					else if (val.src->kind.tag == KOOPA_RVT_BINARY || val.src->kind.tag == KOOPA_RVT_LOAD || val.src->kind.tag == KOOPA_RVT_ALLOC || val.src->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.src->kind.tag == KOOPA_RVT_CALL) {
+					else if (val.src->kind.tag == KOOPA_RVT_BINARY || val.src->kind.tag == KOOPA_RVT_LOAD || val.src->kind.tag == KOOPA_RVT_ALLOC || val.src->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.src->kind.tag == KOOPA_RVT_CALL || val.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
 						int tmp = LocFind((int*)val.src);
 						if (tmp < 2048) {
 							cout << "  lw    t0, " << tmp << "(sp)" << endl;
@@ -761,6 +794,88 @@ void parse_str(const char* str) {
 						LocInsert((int*)value, now);
 						now += 4;
 					}
+				}
+				else if (value->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+					koopa_raw_get_elem_ptr_t val = value->kind.data.get_elem_ptr;
+					if(val.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
+						cout << "  la    t0, " << val.src->name + 1 << endl;
+						if (val.index->kind.tag == KOOPA_RVT_INTEGER) {
+							cout << "  li    t1, " << val.index->kind.data.integer.value << endl;
+						}
+						else if (val.index->kind.tag != KOOPA_RVT_GLOBAL_ALLOC) {
+							int idx = LocFind((int*)val.index);
+							if (idx < 2048) {
+								cout << "  lw    t1, " << idx << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    t1, " << idx << endl;
+								cout << "  add   t1, t1, sp" << endl;
+								cout << "  lw    t1, t1" << endl;
+							}
+						}
+						else {
+							cout << "  la    t1, " << val.index->name + 1 << endl;
+							cout << "  lw    t1, 0(t1)" << endl;
+						}
+						cout << "  li    t2, 4" << endl;
+						cout << "  mul   t1, t1, t2" << endl;
+						cout << "  add   t0, t0, t1" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    t1, " << now << endl;
+							cout << "  add   t1, t1, sp" << endl;
+							cout << "  sw    t0, t1" << endl;
+						}
+						LocInsert((int*)value, now);
+						now += 4;
+					}
+					else {
+						int tmp = LocFind((int*)val.src);
+						if (tmp < 2048) {
+							cout << "  addi  t0, sp, " << tmp << endl;
+						}
+						else {
+							cout << "  li    t0, " << tmp << endl;
+							cout << "  add   t0, t0, sp" << endl;
+						}
+						if (val.index->kind.tag == KOOPA_RVT_INTEGER) {
+							cout << "  li    t1, " << val.index->kind.data.integer.value << endl;
+						}
+						else if(val.index->kind.tag != KOOPA_RVT_GLOBAL_ALLOC){
+							int idx = LocFind((int*)val.index);
+							if (idx < 2048) {
+								cout << "  lw    t1, " << idx << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    t1, " << idx << endl;
+								cout << "  add   t1, t1, sp" << endl;
+								cout << "  lw    t1, t1" << endl;
+							}
+						}
+						else {
+							cout << "  la    t1, " << val.index->name + 1 << endl;
+							cout << "  lw    t1, 0(t1)" << endl;
+						}
+						cout << "  li    t2, 4" << endl;
+						cout << "  mul   t1, t1, t2" << endl;
+						cout << "  add   t0, t0, t1" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    t1, " << now << endl;
+							cout << "  add   t1, t1, sp" << endl;
+							cout << "  sw    t0, t1" << endl;
+						}
+						LocInsert((int*)value, now);
+						now += 4;
+					}
+				}
+				else if(value->kind.tag == KOOPA_RVT_ALLOC){
+					LocInsert((int*)value, now);
+					now += 4;
 				}
 			}
 			cout << endl;
