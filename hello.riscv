@@ -1,63 +1,56 @@
   .data
-  .global x_1
-x_1:
-  .word10
-  .word20
+  .global arr_1
+arr_1:
+  .word 1
+  .word 2
+  .word 3
+  .word 4
+  .word 5
+  .zero 4
+  .zero 4
+  .zero 4
+  .word 6
+  .word 7
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
+  .zero 4
 
   .text
   .global main
 main:
-  addi  sp, sp, -64
-arr_1
-  addi  t0, sp, 0
+  addi  sp, sp, -32
+  la    t0, arr_1
   li    t1, 0
   li    t2, 4
   mul   t1, t1, t2
   add   t0, t0, t1
-  sw    t0, 4(sp)
-  li    t0, 1
-  sw    t0, 4(sp)
+  sw    t0, 0(sp)
   addi  t0, sp, 0
   li    t1, 1
   li    t2, 4
   mul   t1, t1, t2
   add   t0, t0, t1
-  sw    t0, 8(sp)
-  li    t0, 2
-  sw    t0, 8(sp)
-  addi  t0, sp, 0
+  sw    t0, 4(sp)
+  addi  t0, sp, 4
   li    t1, 2
   li    t2, 4
   mul   t1, t1, t2
   add   t0, t0, t1
+  sw    t0, 8(sp)
+  lw    t0, 8(sp)
   sw    t0, 12(sp)
-  li    t0, 3
-  sw    t0, 12(sp)
-  addi  t0, sp, 0
-  li    t1, 3
-  li    t2, 4
-  mul   t1, t1, t2
-  add   t0, t0, t1
-  sw    t0, 16(sp)
-  li    t0, 0
-  sw    t0, 16(sp)
-  addi  t0, sp, 0
-  li    t1, 4
-  li    t2, 4
-  mul   t1, t1, t2
-  add   t0, t0, t1
-  sw    t0, 20(sp)
-  li    t0, 0
-  sw    t0, 20(sp)
-  addi  t0, sp, 0
-  li    t1, 2
-  li    t2, 4
-  mul   t1, t1, t2
-  add   t0, t0, t1
-  sw    t0, 24(sp)
-  lw    t0, 24(sp)
-  sw    t0, 28(sp)
-  lw    a0, 28(sp)
-  addi  sp, sp, 64
+  lw    a0, 12(sp)
+  addi  sp, sp, 32
   ret
 

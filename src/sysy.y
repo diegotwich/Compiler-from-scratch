@@ -278,7 +278,7 @@ VarDef
 InitVal
 	: Exp {
 	  auto ast = new InitValAST();
-	  ast->exp = unique_ptr<BaseAST>($1);
+	  ast->init_val = unique_ptr<BaseAST>($1);
 	  $$ = ast;
 	} | '{' InitVal InitVals '}' {
 	  auto ast = new InitValAST();

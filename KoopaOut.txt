@@ -7,5 +7,67 @@ decl @putarray(i32, *i32)
 decl @starttime()
 decl @stoptime()
 
-global %program_length_1 = alloc i32, 0
+global %buf_1 = alloc [[i32, 100], 2], zeroinit
 
+fun @merge_sort(@l: i32, @r: i32) {
+%entry:
+  %l_1 = alloc i32
+  store @l, %l_1
+  %r_1 = alloc i32
+  store @r, %r_1
+  %0 = load %l_1
+  %1 = add %0, 1
+  %2 = load %r_1
+  %3 = ge %1, %2
+  br %3, %then0, %end0
+
+%then0:
+  ret
+
+%end0:
+  %mid_1 = alloc i32
+  %4 = load %l_1
+  %5 = load %r_1
+  %6 = add %4, %5
+  %7 = div %6, 2
+  store %7, %mid_1
+  %8 = load %l_1
+  %9 = load %mid_1
+  call @merge_sort(%8, %9)
+  %10 = load %mid_1
+  %11 = load %r_1
+  call @merge_sort(%10, %11)
+  %i_1 = alloc i32
+  %12 = load %l_1
+  store %12, %i_1
+  %j_1 = alloc i32
+  %13 = load %mid_1
+  store %13, %j_1
+  %k_1 = alloc i32
+  %14 = load %l_1
+  store %14, %k_1
+  jump %while_entry0
+
+%while_entry0:
+  %15 = load %i_1
+  %16 = load %mid_1
+  %17 = lt %15, %16
+  %18 = load %j_1
+  %19 = load %r_1
+  %20 = lt %18, %19
+  %21 = ne 0, %17
+  %22 = ne 0, %20
+  %23 = and %22, %21
+  br %23, %while_body0, %while_end0
+
+%while_body0:
+  %24 = getelemptr %buf_1, 0
+  %25 = getelemptr %24, 0
+  %26 = load %25
+  %27 = getelemptr %buf_1, 0
+  %28 = getelemptr %27, 0
+  %29 = load %28
+  %30 = lt %26, %29
+  br %30, %then1, %else1
+
+%then1:

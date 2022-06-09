@@ -18,7 +18,9 @@ static int whilenow = 0;
 static int retcnt = 0;
 
 // 用于处理多维数组的初始化
-static int* len;
+static int* arraylen;
+static int nowpos;
+static int* result;
 static int dim;
 
 typedef struct {
@@ -181,6 +183,56 @@ inline void DeleteBlock() {
 	return;
 }
 
+inline void output_alloc(int i) {
+	std::cout << "[";
+	if (i == dim) {
+		std::cout << "i32, " << arraylen[i];
+	}
+	else {
+		output_alloc(i + 1);
+		std::cout << ", " << arraylen[i];
+	}
+	std::cout << "]";
+	return;
+}
+
+inline void output_array(int global, int len, int pos, std::string name, int cnt) {
+	if (global) {
+		for (int i = 0; i < arraylen[len]; i++) {
+			if (len == dim) {
+				if (i) std::cout << ", " << result[pos * arraylen[len] + i];
+				else std::cout << result[pos * arraylen[len] + i];
+			}
+			else {
+				if (i) std::cout << ", {";
+				else std::cout << "{";
+				output_array(global, len + 1, pos * arraylen[len] + i, name, cnt);
+				std::cout << "}";
+			}
+		}
+	}
+	else {
+		int prenow = now;
+		for (int i = 0; i < arraylen[len]; i++) {
+			if (len == 1) {
+				std::cout << "  %" << now << " = getelemptr %" << name << "_" << cnt << ", " << i << std::endl;
+				now++;
+				if (len < dim) output_array(global, len + 1, pos * arraylen[len] + i, name, cnt);
+			
+			}	
+			else if (len != 1) {
+				std::cout << "  %" << now << " = getelemptr %" << prenow - 1 << ", " << i << std::endl;
+				now++;
+				if (len < dim) output_array(global, len + 1, pos * arraylen[len] + i, name, cnt);
+			}
+			if (len == dim) {
+				std::cout << "  store " << result[pos * arraylen[len] + i] << ", %" << now - 1 << std::endl;
+			}	
+		}
+	}
+	return;
+}
+
 inline SymbolList* FindSymbolValue(std::string s) {
 	BlockSymList* blockt = nowBlock;
 	// std::cout << "try to find : "<< s << std::endl;
@@ -274,6 +326,8 @@ public:
 	virtual Calcret Calc() const = 0;
 
 	virtual SymbolList* FindSym() const = 0;
+
+	virtual int Array(int start, int offset) const = 0;
 };
 
 class PreCompAST : public BaseAST {
@@ -312,6 +366,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override{
+
+		return -1;
+	}
 };
 
 class CompUnitAST : public BaseAST {
@@ -340,6 +398,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class DeclAST : public BaseAST {
@@ -361,6 +423,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -385,6 +451,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -414,6 +484,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class ConstDefsAST : public BaseAST {
@@ -439,6 +513,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class ConstDefAST : public BaseAST {
@@ -454,46 +532,68 @@ public:
 			InsertSymbol(name, val, 1, 1);
 		}
 		else if (nowBlock->father == NULL) { // 全局变量
-			int len = const_exps->Calc().value;
-			Symbol sym = InsertSymbol(name, len, 2, 1);
-			std::cout << "global %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]";
-			std::cout << ", {";
-			Dumpret tmp = const_init_val->Dump();
-			int cnt = 0;
+			Dumpret tmp = const_exps->Dump();
+			dim = tmp.value + 1;
+			ParamList* p = new ParamList;
+			p->next = tmp.first;
+			p->now = const_exp->Calc().value;
+			tmp.first = p;
+			arraylen = new int[dim + 5];
+			int ccnt = 1;
 			while (tmp.first != NULL) {
-				if (cnt) std::cout << ", " << tmp.first->now;
-				else std::cout << tmp.first->now;
-				cnt++;
+				arraylen[ccnt++] = tmp.first->now;
 				tmp.first = tmp.first->next;
 			}
-			while (cnt < len) {
-				if (cnt) std::cout << ", 0";
-				else std::cout << "0";
-				cnt++;
+			int size = 1;
+			for (int i = 1; i <= dim; i++) {
+				size *= arraylen[i];
 			}
+			result = new int[size + 5];;
+			nowpos = 0;
+			int init_num = const_init_val->Array(0, 0);
+			for (; init_num < size; init_num++) {
+				result[nowpos++] = 0;
+			}
+			Symbol sym = InsertSymbol(name, dim, 2, 1);
+			std::cout << "global %" << name << "_" << sym.cnt << " = alloc ";
+			output_alloc(1);
+			std::cout << ", {";
+			output_array(1, 1, 0, name, sym.cnt);
 			std::cout << "}";
-			std::cout << std::endl;
+			delete[] arraylen;
+			delete[] result;
+			std::cout << std::endl << std::endl;
 		}
 		else {
-			int len = const_exps->Calc().value;
-			Symbol sym = InsertSymbol(name, len, 2, 1);
-			std::cout << "  %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]" << std::endl;
-			Dumpret tmp = const_init_val->Dump();
-			int cnt = 0;
+			Dumpret tmp = const_exps->Dump();
+			dim = tmp.value + 1;
+			ParamList* p = new ParamList;
+			p->next = tmp.first;
+			p->now = const_exp->Calc().value;
+			tmp.first = p;
+			arraylen = new int[dim + 5];
+			int ccnt = 1;
 			while (tmp.first != NULL) {
-				std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
-				std::cout << "  store " << tmp.first->now << ", %" << now << std::endl;
-				now++;
-				cnt++;
+				arraylen[ccnt++] = tmp.first->now;
 				tmp.first = tmp.first->next;
 			}
-			while (cnt < len) {
-				std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
-				std::cout << "  store 0, %" << now << std::endl;
-				now++;
-				cnt++;
+			int size = 1;
+			for (int i = 1; i <= dim; i++) {
+				size *= arraylen[i];
 			}
-			std::cout << std::endl;
+			result = new int[size + 5];;
+			nowpos = 0;
+			int init_num = const_init_val->Array(0, 0);
+			for (; init_num < size; init_num++) {
+				result[nowpos++] = 0;
+			}
+			Symbol sym = InsertSymbol(name, dim, 2, 1);
+			std::cout << "  %" << name << "_" << sym.cnt << " = alloc ";
+			output_alloc(1);
+			output_array(0, 1, 0, name, sym.cnt);
+			delete[] arraylen;
+			delete[] result;
+			std::cout << std::endl << std::endl;
 		}
 		Dumpret tmp;
 		tmp.type = 1;
@@ -507,6 +607,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -539,6 +643,43 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+		if (exist == 2) { // "{ }"
+			if (offset == 0) { // 按照后dim-start个来递归、对齐
+				int pos = const_exp->Array(start + 1, 0);
+				int vals = const_exps->Array(start + 1, pos);
+				int tmp = 1, done = pos + vals;
+				for (int i = start + 1; i <= dim; i++) {
+					tmp *= arraylen[i];
+				}
+				for (; done < tmp; done++) {
+					result[nowpos++] = 0;
+				}
+				return tmp;
+			}
+			else {
+				int tmp = 1;
+				int rim = dim;
+				for (; rim >= start; rim--) {
+					if (offset % (tmp * arraylen[rim]) != 0) break;
+					tmp *= arraylen[rim];
+				}
+				assert(tmp != 1); // 对不齐
+				int pos = const_exp->Array(rim, 0);
+				int vals = const_exps->Array(rim, pos);
+				for (int done = pos + vals; done < tmp; done++) {
+					result[nowpos++] = 0;
+				}
+				return tmp;
+			}
+		}
+		else if (exist == 1) { // Exp
+			result[nowpos++] = const_exp->Calc().value;
+			return 1;
+		}
+		// NULL
+		return 0;
+	}
 };
 
 class ConstInitValsAST : public BaseAST {
@@ -560,6 +701,14 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+		if (exist) {
+			int pos = const_init_val->Array(start, offset);
+			int vals = const_init_vals->Array(start, offset + pos);
+			return pos + vals;
+		}
+		return 0;
+	}
 };
 class ConstExpsAST : public BaseAST {
 public:
@@ -575,6 +724,7 @@ public:
 			tmp.first = new ParamList;
 			tmp.first->next = tt.first;
 			tmp.first->now = val;
+			tmp.value = tt.value + 1;
 			tmp.type = 8;
 		}
 		else {
@@ -591,6 +741,10 @@ public:
 	SymbolList* FindSym() const override {
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -615,6 +769,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}	
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -641,6 +799,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class VarDefAST : public BaseAST {
@@ -658,26 +820,43 @@ public:
 				std::cout << "global %" << name << "_" << sym.cnt << " = alloc i32, " << val << std::endl << std::endl;
 			}
 			else {
-				dim = const_exps->Calc().value + 1; // 维度
-				Symbol sym = InsertSymbol(name, len, 2, initialized);
-				std::cout << "global %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]";
+				Dumpret tmp = const_exps->Dump(); 
+				dim = tmp.value + 1;
+				ParamList* p = new ParamList;
+				p->next = tmp.first;
+				p->now = const_exp->Calc().value;
+				tmp.first = p;
+				arraylen = new int[dim + 5];
+				int ccnt = 1;
+				while (tmp.first != NULL) {
+					arraylen[ccnt++] = tmp.first->now;
+					tmp.first = tmp.first->next;
+				}
+				int size = 1;
+				for (int i = 1; i <= dim; i++) {
+					size *= arraylen[i];
+				}
+				result = new int[size + 5];
+				nowpos = 0;
+				if (initialized) {
+					int init_num = init_val->Array(0, 0);
+					for (; init_num < size; init_num++) {
+						result[nowpos++] = 0;
+					}
+				}
+				Symbol sym = InsertSymbol(name, dim, 2, initialized);
+				std::cout << "global %" << name << "_" << sym.cnt << " = alloc ";
+				output_alloc(1);
 				if (initialized) {
 					std::cout << ", {";
-					Dumpret tmp = init_val->Dump();
-					int cnt = 0;
-					while (tmp.first != NULL) {
-						if (cnt) std::cout << ", " << tmp.first->now;
-						else std::cout << tmp.first->now;
-						cnt++;
-						tmp.first = tmp.first->next;
-					}
-					while (cnt < len) {
-						if (cnt) std::cout << ", 0";
-						else std::cout << "0";
-						cnt++;
-					}
+					output_array(1, 1, 0, name, sym.cnt);
 					std::cout << "}";
 				}
+				else {
+					std::cout << ", zeroinit";
+				}
+				delete[] arraylen;
+				delete[] result;
 				std::cout << std::endl << std::endl;
 			}
 		}
@@ -697,27 +876,40 @@ public:
 				}
 			}
 			else {
-				int len = const_exp->Calc().value;
-				Symbol sym = InsertSymbol(name, len, 2, initialized);
-				std::cout << "  %" << name << "_" << sym.cnt << " = alloc [i32, " << len << "]" << std::endl;
+				Dumpret tmp = const_exps->Dump();
+				dim = tmp.value + 1;
+				ParamList* p = new ParamList;
+				p->next = tmp.first;
+				p->now = const_exp->Calc().value;
+				tmp.first = p;
+				arraylen = new int[dim + 5];
+				int ccnt = 1;
+				while (tmp.first != NULL) {
+					arraylen[ccnt++] = tmp.first->now;
+					tmp.first = tmp.first->next;
+				}
+				int size = 1;
+				for (int i = 1; i <= dim; i++) {
+					size *= arraylen[i];
+				}
+				result = new int[size + 5];
+				nowpos = 0;
 				if (initialized) {
-					Dumpret tmp = init_val->Dump();
-					int cnt = 0;
-					while (tmp.first != NULL) {
-						std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
-						std::cout << "  store " << tmp.first->now << ", %" << now << std::endl;
-						now++;
-						cnt++;
-						tmp.first = tmp.first->next;
-					}
-					while (cnt < len) {
-						std::cout << "  %" << now << " = getelemptr %" << name << "_" << sym.cnt << ", " << cnt << std::endl;
-						std::cout << "  store 0, %" << now << std::endl;
-						now++;
-						cnt++;
+					Debug();
+					int init_num = init_val->Array(0, 0);
+					for (; init_num < size; init_num++) {
+						result[nowpos++] = 0;
 					}
 				}
+				Symbol sym = InsertSymbol(name, dim, 2, initialized);
+				std::cout << "  %" << name << "_" << sym.cnt << " = alloc ";
+				output_alloc(1);
 				std::cout << std::endl;
+				if (initialized) {
+					output_array(0, 1, 0, name, sym.cnt);
+				}
+				delete[] arraylen;
+				delete[] result;
 			}
 		}
 		Dumpret tmp;
@@ -733,6 +925,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class InitValAST : public BaseAST {
@@ -743,26 +939,52 @@ public:
 	Dumpret Dump() const override {
 		Dumpret tmp;
 		tmp.type = 1;
-		if (exist == 2) {
-			int val = exp->Calc().value;
-			Dumpret tt = exps->Dump();
-			tmp.first = new ParamList;
-			tmp.first->next = tt.first;
-			tmp.first->now = val;
-			tmp.type = 8;
-		}
-		else {
-			tmp = exp->Dump();
-			tmp.first = NULL;
-		}
+		if (exist) tmp = init_val->Dump();
 		return tmp;
 	}
 	Calcret Calc() const override {
-		return exp->Calc();
+		return init_val->Calc();
 	}
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+		if (exist == 2) { // "{ }"
+			if (offset == 0) { // 按照后dim-start个来递归、对齐
+				int pos = init_val->Array(start + 1, 0);
+				int vals = init_vals->Array(start + 1, pos);
+				int tmp = 1, done = pos + vals;
+				for (int i = start + 1; i <= dim; i++) {
+					tmp *= arraylen[i];
+				}
+				for (; done < tmp; done++) {
+					result[nowpos++] = 0;
+				}
+				return tmp;
+			}
+			else {
+				int tmp = 1;
+				int rim = dim;
+				for (; rim >= start; rim--) {
+					if (offset % (tmp * arraylen[rim]) != 0) break;
+					tmp *= arraylen[rim];
+				}
+				assert(tmp != 1); // 对不齐
+				int pos = init_val->Array(rim, 0);
+				int vals = init_vals->Array(rim, pos);
+				for (int done = pos + vals; done < tmp; done++) {
+					result[nowpos++] = 0;
+				}
+				return tmp;
+			}
+		}
+		else if (exist == 1) { // Exp
+			result[nowpos++] = init_val->Calc().value;
+			return 1;
+		}
+		// NULL
+		return 0;
 	}
 };
 
@@ -773,6 +995,10 @@ public:
 	std::unique_ptr<BaseAST> init_vals;
 	Dumpret Dump() const override {
 		Dumpret tmp;
+		if (exist) {
+			tmp = init_val->Dump();
+			init_vals->Dump();
+		}
 		tmp.type = 1;
 		return tmp;
 	}
@@ -784,6 +1010,14 @@ public:
 	SymbolList* FindSym() const override {
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+		if (exist) {
+			int pos = init_val->Array(start, offset);
+			int vals = init_vals->Array(start, offset + pos);
+			return pos + vals;
+		}
+		return 0;
 	}
 };
 
@@ -810,6 +1044,12 @@ public:
 		return tmp;
 	}
 	Calcret Calc() const override {
+		if (exist) {
+			int pos = exp->Calc().value;
+			std::cout << "  %" << now << " = getelemptr %" << now - 1 << ", " << pos << std::endl;
+			now++;
+			exps->Calc();
+		}
 		Calcret tmp;
 		tmp.type = -1;
 		return tmp;
@@ -817,6 +1057,10 @@ public:
 	SymbolList* FindSym() const override {
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -869,6 +1113,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -932,6 +1180,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class FuncFParamAST : public BaseAST {
@@ -958,6 +1210,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class BlockAST : public BaseAST {
@@ -979,6 +1235,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -1036,6 +1296,10 @@ public:
 		else tmp->sym.status = -1;
 		return tmp;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class BlockItemAST : public BaseAST {
@@ -1052,6 +1316,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -1080,6 +1348,7 @@ public:
 			int pos = exp->Calc().value;
 			std::cout << "  %" << now << " = getelemptr %" << tmp->sym.name << "_" << tmp->sym.cnt << ", " << pos << std::endl;
 			now++;
+			exps->Calc();
 			std::cout << "  %" << now << " = load %" << now - 1 << std::endl;
 			now++;
 			Dumpret tmp;
@@ -1097,6 +1366,10 @@ public:
 	SymbolList* FindSym() const override {
 		return FindSymbolValue(name);
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class StmtAST : public BaseAST {
@@ -1111,6 +1384,10 @@ public:
 	}
 	SymbolList* FindSym() const override {
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -1247,6 +1524,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class OpenStmtAST : public BaseAST {
@@ -1293,6 +1574,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class ExpAST : public BaseAST {
@@ -1310,6 +1595,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class PrimaryExpAST : public BaseAST {
@@ -1325,6 +1614,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -1438,6 +1731,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class FuncRParamAST : public BaseAST {
@@ -1472,6 +1769,10 @@ public:
 	SymbolList* FindSym() const override {
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -1559,6 +1860,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class AddExpAST : public BaseAST {
@@ -1631,6 +1936,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -1726,6 +2035,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class EqExpAST : public BaseAST {
@@ -1798,6 +2111,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class LAndExpAST : public BaseAST {
@@ -1865,6 +2182,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class LOrExpAST : public BaseAST {
@@ -1930,6 +2251,10 @@ public:
 
 		return NULL;
 	}
+	int Array(int start, int offset) const override {
+
+		return -1;
+	}
 };
 
 class ConstExpAST : public BaseAST {
@@ -1948,6 +2273,10 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };
 
@@ -1972,5 +2301,9 @@ public:
 	SymbolList* FindSym() const override{
 
 		return NULL;
+	}
+	int Array(int start, int offset) const override {
+
+		return -1;
 	}
 };

@@ -90,6 +90,26 @@ int FindAllocMemory(koopa_raw_type_t now) {
 	return 0;
 }
 
+void init_array(koopa_raw_aggregate_t nowarray) {
+	int len = nowarray.elems.len;
+	for (size_t j = 0; j < len; ++j) {
+		koopa_raw_value_t tt = (koopa_raw_value_t)nowarray.elems.buffer[j];
+		if (tt->kind.tag == KOOPA_RVT_AGGREGATE) {
+			koopa_raw_aggregate_t nextarray = tt->kind.data.aggregate;
+			init_array(nextarray);
+		}
+		else if (tt->kind.tag == KOOPA_RVT_INTEGER) {
+			if (tt->kind.data.integer.value == 0) {
+				cout << "  .zero 4" << endl;
+			}
+			else {
+				cout << "  .word " << tt->kind.data.integer.value << endl;
+			}
+		}
+	}
+	return;
+}
+
 void parse_str(const char* str) {
 	// 解析字符串 str, 得到 Koopa IR 程序
 	koopa_program_t program;
@@ -122,16 +142,7 @@ void parse_str(const char* str) {
 				}
 				else if (initval.init->kind.tag == KOOPA_RVT_AGGREGATE) {
 					koopa_raw_aggregate_t arraytmp = initval.init->kind.data.aggregate;
-					int len = arraytmp.elems.len;
-					for (size_t j = 0; j < len; ++j) {
-						koopa_raw_value_t tt = (koopa_raw_value_t)arraytmp.elems.buffer[j];
-						if (tt->kind.data.integer.value == 0) {
-							cout << "  .zero 4" << endl;
-						}
-						else {
-							cout << "  .word" << tt->kind.data.integer.value << endl;
-						}
-					}
+					init_array(arraytmp);
 				}
 				cout << endl;
 			}
