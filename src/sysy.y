@@ -35,7 +35,7 @@ InitVal       ::= Exp | "{" [InitVal {"," InitVal}] "}";
 
 FuncDef       ::= FuncType IDENT "(" [FuncFParams] ")" Block;
 FuncFParams   ::= FuncFParam {"," FuncFParam};
-FuncFParam	  ::= Type IDENT;	
+FuncFParam	  ::= Type IDENT ["[" "]" { "[" ConstExp "]"}];	
 
 Block         ::= "{" BlockItems "}";
 BlockItems    ::= BlockItem BlockItems | null;
@@ -356,6 +356,13 @@ FuncFParam
 	  auto ast = new FuncFParamAST();
 	  ast->ident = *($2);
 	  ast->type = unique_ptr<BaseAST>($1);
+	  $$ = ast;
+	} | Type IDENT '[' ']' ConstExps {
+	  auto ast = new FuncFParamAST();
+	  ast->ident = *($2);
+	  ast->type = unique_ptr<BaseAST>($1);
+	  ast->is_array = 1;
+	  ast->const_exps = unique_ptr<BaseAST>($5);
 	  $$ = ast;
 	}
 	;

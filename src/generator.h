@@ -144,6 +144,10 @@ void parse_str(const char* str) {
 					koopa_raw_aggregate_t arraytmp = initval.init->kind.data.aggregate;
 					init_array(arraytmp);
 				}
+				else if (initval.init->kind.tag == KOOPA_RVT_ZERO_INIT) {
+					int tt = FindAllocMemory(val->ty->data.pointer.base);
+					cout << "  .zero " << tt << endl;
+				}
 				cout << endl;
 			}
 		}
@@ -175,11 +179,10 @@ void parse_str(const char* str) {
 					koopa_raw_call_t val = value->kind.data.call;
 					maxarg = maxarg > val.args.len + 1 ? maxarg : (val.args.len + 1);
 				}
-				else if (value->kind.tag == KOOPA_RVT_AGGREGATE) {
-					if (value->kind.data.aggregate.elems.len) {
-						koopa_raw_value_t val = (koopa_raw_value_t)value->kind.data.aggregate.elems.buffer[0];
-						int ttmp = FindAllocMemory(val->ty);
-						offset += ttmp * value->kind.data.aggregate.elems.len;
+				else if (value->kind.tag == KOOPA_RVT_ALLOC && value->ty->tag == KOOPA_RTT_POINTER) {
+					if (value->ty->data.pointer.base->tag == KOOPA_RTT_ARRAY) {
+						int ttmp = FindAllocMemory(value->ty->data.pointer.base);
+						offset += ttmp;
 					}
 				}
 			}
@@ -198,20 +201,20 @@ void parse_str(const char* str) {
 		}
 		LocInsert((int*)func, offset);
 		if (func->params.len > 8) {
-			for (size_t j = func->params.len - 1; j >= 8; j--) { // 参数存到栈帧里
-				LocInsert((int*)func->params.buffer[j], now);
+			for (size_t k = func->params.len - 1; k >= 8; k--) { // 参数存到栈帧里
+				LocInsert((int*)func->params.buffer[k], now);
 				now += 4;
 			}
-			for (size_t j = 0; j < 8; j++) {
-				cout << "  sw    a" << j << ", " << now << "(sp)" << endl;
-				LocInsert((int*)func->params.buffer[j], now);
+			for (size_t k = 0; k < 8; k++) {
+				cout << "  sw    a" << k << ", " << now << "(sp)" << endl;
+				LocInsert((int*)func->params.buffer[k], now);
 				now += 4;
 			}
 		}
 		else {
-			for (size_t j = 0; j < func->params.len; j++) {
-				cout << "  sw    a" << j << ", " << now << "(sp)" << endl;
-				LocInsert((int*)func->params.buffer[j], now);
+			for (size_t k = 0; k < func->params.len; k++) {
+				cout << "  sw    a" << k << ", " << now << "(sp)" << endl;
+				LocInsert((int*)func->params.buffer[k], now);
 				now += 4;
 			}
 		}
@@ -230,7 +233,7 @@ void parse_str(const char* str) {
 					else {
 						cout << "  li    t0, " << now << endl;
 						cout << "  add   t0, t0, sp" << endl;
-						cout << "  sw    ra, t0" << endl;
+						cout << "  sw    ra, 0(t0)" << endl;
 					}
 					now += 4;
 				}
@@ -250,7 +253,7 @@ void parse_str(const char* str) {
 						l[0] = 't', l[1] = '0';
 						cout << "  li    " << l << ", " << val.lhs->kind.data.integer.value << endl;
 					}
-					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY || val.lhs->kind.tag == KOOPA_RVT_LOAD || val.lhs->kind.tag == KOOPA_RVT_ALLOC || val.lhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.lhs->kind.tag == KOOPA_RVT_CALL || val.lhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY || val.lhs->kind.tag == KOOPA_RVT_LOAD || val.lhs->kind.tag == KOOPA_RVT_ALLOC || val.lhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.lhs->kind.tag == KOOPA_RVT_CALL || val.lhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.lhs->kind.tag == KOOPA_RVT_GET_PTR) {
 						int loc = LocFind((int*)val.lhs);
 						assert(loc >= 0);
 						if (loc < 2048) {
@@ -259,7 +262,10 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t1, " << loc << endl;
 							cout << "  add   t1, t1, sp" << endl;
-							cout << "  lw    t0, t1" << endl;
+							cout << "  lw    t0, 0(t1)" << endl;
+						}
+						if (val.lhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.lhs->kind.tag == KOOPA_RVT_GET_PTR) {
+							cout << "  lw    t0, 0(t0)" << endl;
 						}
 						l[0] = 't', l[1] = '0';
 					}
@@ -275,7 +281,7 @@ void parse_str(const char* str) {
 						r[0] = 't', r[1] = '1';
 						cout << "  li    " << r << ", " << val.rhs->kind.data.integer.value << endl;
 					}
-					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY || val.rhs->kind.tag == KOOPA_RVT_LOAD || val.rhs->kind.tag == KOOPA_RVT_ALLOC || val.rhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.rhs->kind.tag == KOOPA_RVT_CALL || val.rhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY || val.rhs->kind.tag == KOOPA_RVT_LOAD || val.rhs->kind.tag == KOOPA_RVT_ALLOC || val.rhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.rhs->kind.tag == KOOPA_RVT_CALL || val.rhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.rhs->kind.tag == KOOPA_RVT_GET_PTR) {
 						int loc = LocFind((int*)val.rhs);
 						assert(loc >= 0);
 						if (loc < 2048) {
@@ -284,7 +290,10 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << loc << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  lw    t1, t2" << endl;
+							cout << "  lw    t1, 0(t2)" << endl;
+						}
+						if (val.rhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.rhs->kind.tag == KOOPA_RVT_GET_PTR) {
+							cout << "  lw    t1, 0(t1)" << endl;
 						}
 						r[0] = 't', r[1] = '1';
 					}
@@ -302,7 +311,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_SUB) {
@@ -314,7 +323,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_ADD) {
@@ -326,7 +335,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_MUL) {
@@ -338,7 +347,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_DIV) {
@@ -350,7 +359,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_MOD) {
@@ -362,7 +371,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_NOT_EQ) {
@@ -374,7 +383,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_GT) {
@@ -385,7 +394,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_LT) {
@@ -396,7 +405,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_GE) {
@@ -408,7 +417,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_LE) {
@@ -420,7 +429,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_AND) {
@@ -431,7 +440,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					else if (val.op == KOOPA_RBO_OR) {
@@ -442,7 +451,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t2, " << now << endl;
 							cout << "  add   t2, t2, sp" << endl;
-							cout << "  sw    t0, t2" << endl;
+							cout << "  sw    t0, 0(t2)" << endl;
 						}
 					}
 					LocInsert((int*)value, now);
@@ -456,7 +465,7 @@ void parse_str(const char* str) {
 					else if (ret_value->kind.tag == KOOPA_RVT_INTEGER) {
 						cout << "  li    " << "a0, " << ret_value->kind.data.integer.value << endl;
 					}
-					else if (ret_value->kind.tag == KOOPA_RVT_BINARY || ret_value->kind.tag == KOOPA_RVT_LOAD || ret_value->kind.tag == KOOPA_RVT_ALLOC || ret_value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || ret_value->kind.tag == KOOPA_RVT_CALL || ret_value->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+					else if (ret_value->kind.tag == KOOPA_RVT_BINARY || ret_value->kind.tag == KOOPA_RVT_LOAD || ret_value->kind.tag == KOOPA_RVT_ALLOC || ret_value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || ret_value->kind.tag == KOOPA_RVT_CALL || ret_value->kind.tag == KOOPA_RVT_GET_ELEM_PTR || ret_value->kind.tag == KOOPA_RVT_GET_PTR) {
 						int tmp = LocFind((int*)ret_value);
 						if (tmp < 2048) {
 							cout << "  lw    a0, " << tmp << "(sp)" << endl;
@@ -464,6 +473,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    a0, " << tmp << endl;
 							cout << "  add   a0, a0, sp" << endl;
+							cout << "  lw    a0, 0(a0)" << endl;
 						}
 					}
 					else if (ret_value->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
@@ -478,7 +488,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t0, " << ra_store << endl;
 							cout << "  add   t0, t0, sp" << endl;
-							cout << "  lw    ra, t0" << endl;
+							cout << "  lw    ra, 0(t0)" << endl;
 						}
 					}
 					if (offset != 0) {
@@ -499,7 +509,7 @@ void parse_str(const char* str) {
 						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
 							cout << "  sw    t0, " << val.dest->kind.data.integer.value << endl;
 						}
-						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL || val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL) {
 							int tmp = LocFind((int*)val.dest);
 							if (tmp < 2048) {
 								cout << "  sw    t0, " << tmp << "(sp)" << endl;
@@ -507,8 +517,20 @@ void parse_str(const char* str) {
 							else {
 								cout << "  li    t1, " << tmp << endl;
 								cout << "  add   t1, t1, sp" << endl;
-								cout << "  sw    t0, t1" << endl;
+								cout << "  sw    t0, 0(t1)" << endl;
 							}
+						}
+						else if (val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.dest->kind.tag == KOOPA_RVT_GET_PTR) {
+							int tmp = LocFind((int*)val.dest);
+							if (tmp < 2048) {
+								cout << "  lw    t1, " << tmp << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    t1, " << tmp << endl;
+								cout << "  add   t1, t1, sp" << endl;
+								cout << "  lw    t1, 0(t1)" << endl;
+							}
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 						else if (val.dest->kind.tag == KOOPA_RVT_ALLOC) {
 							int tmp = LocFind((int*)val.dest);
@@ -519,7 +541,7 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t1, " << now << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 								LocInsert((int*)val.dest, now);
 								now += 4;
@@ -531,7 +553,7 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t1, " << tmp << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 							}
 						}
@@ -540,7 +562,7 @@ void parse_str(const char* str) {
 							cout << "  sw    t0, 0(t1)" << endl;
 						}
 					}
-					else if (val.value->kind.tag == KOOPA_RVT_BINARY || val.value->kind.tag == KOOPA_RVT_LOAD || val.value->kind.tag == KOOPA_RVT_ALLOC || val.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.value->kind.tag == KOOPA_RVT_CALL || val.value->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+					else if (val.value->kind.tag == KOOPA_RVT_BINARY || val.value->kind.tag == KOOPA_RVT_LOAD || val.value->kind.tag == KOOPA_RVT_ALLOC || val.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.value->kind.tag == KOOPA_RVT_CALL || val.value->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.value->kind.tag == KOOPA_RVT_GET_PTR) {
 						int left = LocFind((int*)val.value);
 						assert(left != -1); // ALLOC还未赋值
 						if (left < 2048) {
@@ -549,12 +571,12 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t0, " << left << endl;
 							cout << "  add   t0, t0, sp" << endl;
-							cout << "  lw    t0, t0" << endl;
+							cout << "  lw    t0, 0(t0)" << endl;
 						}
 						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
 							cout << "  sw    t0, " << val.dest->kind.data.integer.value << endl;
 						}
-						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL || val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL) {
 							int right = LocFind((int*)val.dest);
 							if (right < 2048) {
 								cout << "  sw    t0, " << right << "(sp)" << endl;
@@ -562,8 +584,20 @@ void parse_str(const char* str) {
 							else {
 								cout << "  li    t1, " << right << endl;
 								cout << "  add   t1, t1, sp" << endl;
-								cout << "  sw    t0, t1" << endl;
+								cout << "  sw    t0, 0(t1)" << endl;
 							}
+						}
+						else if (val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.dest->kind.tag == KOOPA_RVT_GET_PTR) {
+							int tmp = LocFind((int*)val.dest);
+							if (tmp < 2048) {
+								cout << "  lw    t1, " << tmp << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    t1, " << tmp << endl;
+								cout << "  add   t1, t1, sp" << endl;
+								cout << "  lw    t1, 0(t1)" << endl;
+							}
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 						else if (val.dest->kind.tag == KOOPA_RVT_ALLOC) {
 							int tmp = LocFind((int*)val.dest);
@@ -574,7 +608,7 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t1, " << now << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 								LocInsert((int*)val.dest, now);
 								now += 4;
@@ -586,7 +620,7 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t1, " << tmp << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 							}
 						}
@@ -601,7 +635,7 @@ void parse_str(const char* str) {
 						if (val.dest->kind.tag == KOOPA_RVT_INTEGER) {
 							cout << "  sw    t0, " << val.dest->kind.data.integer.value << endl;
 						}
-						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL || val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+						else if (val.dest->kind.tag == KOOPA_RVT_BINARY || val.dest->kind.tag == KOOPA_RVT_LOAD || val.dest->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.dest->kind.tag == KOOPA_RVT_CALL) {
 							int tmp = LocFind((int*)val.dest);
 							if (tmp < 2048) {
 								cout << "  sw    t0, " << tmp << "(sp)" << endl;
@@ -609,8 +643,20 @@ void parse_str(const char* str) {
 							else {
 								cout << "  li    t1, " << tmp << endl;
 								cout << "  add   t1, t1, sp" << endl;
-								cout << "  sw    t0, t1" << endl;
+								cout << "  sw    t0, 0(t1)" << endl;
 							}
+						}
+						else if (val.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.dest->kind.tag == KOOPA_RVT_GET_PTR) {
+							int tmp = LocFind((int*)val.dest);
+							if (tmp < 2048) {
+								cout << "  lw    t1, " << tmp << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    t1, " << tmp << endl;
+								cout << "  add   t1, t1, sp" << endl;
+								cout << "  lw    t1, 0(t1)" << endl;
+							}
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 						else if (val.dest->kind.tag == KOOPA_RVT_ALLOC) {
 							int tmp = LocFind((int*)val.dest);
@@ -621,7 +667,7 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t1, " << now << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 								LocInsert((int*)val.dest, now);
 								now += 4;
@@ -633,7 +679,7 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t1, " << tmp << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 							}
 						}
@@ -653,10 +699,10 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t1, " << now << endl;
 							cout << "  add   t1, t1, sp" << endl;
-							cout << "  sw    t0, t1" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 					}
-					else if (val.src->kind.tag == KOOPA_RVT_BINARY || val.src->kind.tag == KOOPA_RVT_LOAD || val.src->kind.tag == KOOPA_RVT_ALLOC || val.src->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.src->kind.tag == KOOPA_RVT_CALL || val.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR) {
+					else if (val.src->kind.tag == KOOPA_RVT_BINARY || val.src->kind.tag == KOOPA_RVT_LOAD || val.src->kind.tag == KOOPA_RVT_ALLOC || val.src->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.src->kind.tag == KOOPA_RVT_CALL) {
 						int tmp = LocFind((int*)val.src);
 						if (tmp < 2048) {
 							cout << "  lw    t0, " << tmp << "(sp)" << endl;
@@ -664,7 +710,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t0, " << tmp << endl;
 							cout << "  add   t0, t0, sp" << endl;
-							cout << "  lw    t0, t0" << endl;
+							cout << "  lw    t0, 0(t0)" << endl;
 						}
 						if (now < 2048) {
 							cout << "  sw    t0, " << now << "(sp)" << endl;
@@ -672,7 +718,27 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t1, " << now << endl;
 							cout << "  add   t1, t1, sp" << endl;
-							cout << "  sw    t0, t1" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
+						}
+					}
+					else if (val.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.src->kind.tag == KOOPA_RVT_GET_PTR) {
+						int tmp = LocFind((int*)val.src);
+						if (tmp < 2048) {
+							cout << "  lw    t0, " << tmp << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    t0, " << tmp << endl;
+							cout << "  add   t0, t0, sp" << endl;
+							cout << "  lw    t0, 0(t0)" << endl;
+						}
+						cout << "  lw    t0, 0(t0)" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    t1, " << now << endl;
+							cout << "  add   t1, t1, sp" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 					}
 					else if (val.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
@@ -684,7 +750,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t1, " << now << endl;
 							cout << "  add   t1, t1, sp" << endl;
-							cout << "  sw    t0, t1" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 					}
 					LocInsert((int*)value, now);
@@ -704,7 +770,10 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t0, " << tmp << endl;
 							cout << "  add   t0, t0, sp" << endl;
-							cout << "  lw    t0, t0" << endl;
+							cout << "  lw    t0, 0(t0)" << endl;
+						}
+						if (val.cond->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.cond->kind.tag == KOOPA_RVT_GET_PTR) {
+							cout << "  lw    t0, 0(t0)" << endl;
 						}
 						cout << "  bnez  t0, " << val.true_bb->name + 1 << endl;
 					}
@@ -737,7 +806,7 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t0, " << loc << endl;
 									cout << "  add   t0, t0, sp" << endl;
-									cout << "  lw    a" << x << ", " << "t0" << endl;
+									cout << "  lw    a" << x << ", " << "0(t0)" << endl;
 								}
 							}
 							else {
@@ -752,7 +821,7 @@ void parse_str(const char* str) {
 								if (off < -2048) {
 									cout << "  li    t1, " << off << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 								else {
 									cout << "  sw    t0, " << off << "(sp)" << endl;
@@ -766,12 +835,12 @@ void parse_str(const char* str) {
 								else {
 									cout << "  li    t0, " << loc << endl;
 									cout << "  add   t0, t0, sp" << endl;
-									cout << "  lw    t0, t0" << endl;
+									cout << "  lw    t0, 0(t0)" << endl;
 								}
 								if (off < -2048) {
 									cout << "  li    t1, " << off << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 								else {
 									cout << "  sw    t0, " << off << "(sp)" << endl;
@@ -783,7 +852,7 @@ void parse_str(const char* str) {
 								if (off < -2048) {
 									cout << "  li    t1, " << off << endl;
 									cout << "  add   t1, t1, sp" << endl;
-									cout << "  sw    t0, t1" << endl;
+									cout << "  sw    t0, 0(t1)" << endl;
 								}
 								else {
 									cout << "  sw    t0, " << off << "(sp)" << endl;
@@ -800,7 +869,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t0, " << now << endl;
 							cout << "  add   t0, t0, sp" << endl;
-							cout << "  sw    a0, t0" << endl;
+							cout << "  sw    a0, 0(t0)" << endl;
 						}
 						LocInsert((int*)value, now);
 						now += 4;
@@ -821,14 +890,15 @@ void parse_str(const char* str) {
 							else {
 								cout << "  li    t1, " << idx << endl;
 								cout << "  add   t1, t1, sp" << endl;
-								cout << "  lw    t1, t1" << endl;
+								cout << "  lw    t1, 0(t1)" << endl;
 							}
 						}
 						else {
 							cout << "  la    t1, " << val.index->name + 1 << endl;
 							cout << "  lw    t1, 0(t1)" << endl;
 						}
-						cout << "  li    t2, 4" << endl;
+						int multisize = FindAllocMemory(value->ty->data.pointer.base);
+						cout << "  li    t2, " << multisize << endl;
 						cout << "  mul   t1, t1, t2" << endl;
 						cout << "  add   t0, t0, t1" << endl;
 						if (now < 2048) {
@@ -837,7 +907,7 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t1, " << now << endl;
 							cout << "  add   t1, t1, sp" << endl;
-							cout << "  sw    t0, t1" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 						LocInsert((int*)value, now);
 						now += 4;
@@ -851,6 +921,9 @@ void parse_str(const char* str) {
 							cout << "  li    t0, " << tmp << endl;
 							cout << "  add   t0, t0, sp" << endl;
 						}
+						if (val.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.src->kind.tag == KOOPA_RVT_GET_PTR) {
+							cout << "  lw    t0, 0(t0)" << endl;
+						}
 						if (val.index->kind.tag == KOOPA_RVT_INTEGER) {
 							cout << "  li    t1, " << val.index->kind.data.integer.value << endl;
 						}
@@ -862,14 +935,15 @@ void parse_str(const char* str) {
 							else {
 								cout << "  li    t1, " << idx << endl;
 								cout << "  add   t1, t1, sp" << endl;
-								cout << "  lw    t1, t1" << endl;
+								cout << "  lw    t1, 0(t1)" << endl;
 							}
 						}
 						else {
 							cout << "  la    t1, " << val.index->name + 1 << endl;
 							cout << "  lw    t1, 0(t1)" << endl;
 						}
-						cout << "  li    t2, 4" << endl;
+						int multisize = FindAllocMemory(value->ty->data.pointer.base);
+						cout << "  li    t2, " << multisize << endl;
 						cout << "  mul   t1, t1, t2" << endl;
 						cout << "  add   t0, t0, t1" << endl;
 						if (now < 2048) {
@@ -878,7 +952,88 @@ void parse_str(const char* str) {
 						else {
 							cout << "  li    t1, " << now << endl;
 							cout << "  add   t1, t1, sp" << endl;
-							cout << "  sw    t0, t1" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
+						}
+						LocInsert((int*)value, now);
+						now += 4;
+					}
+				}
+				else if (value->kind.tag == KOOPA_RVT_GET_PTR) {
+					koopa_raw_get_ptr_t val = value->kind.data.get_ptr;
+					if (val.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
+						cout << "  la    t0, " << val.src->name + 1 << endl;
+						if (val.index->kind.tag == KOOPA_RVT_INTEGER) {
+							cout << "  li    t1, " << val.index->kind.data.integer.value << endl;
+						}
+						else if (val.index->kind.tag != KOOPA_RVT_GLOBAL_ALLOC) {
+							int idx = LocFind((int*)val.index);
+							if (idx < 2048) {
+								cout << "  lw    t1, " << idx << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    t1, " << idx << endl;
+								cout << "  add   t1, t1, sp" << endl;
+								cout << "  lw    t1, 0(t1)" << endl;
+							}
+						}
+						else {
+							cout << "  la    t1, " << val.index->name + 1 << endl;
+							cout << "  lw    t1, 0(t1)" << endl;
+						}
+						int multisize = FindAllocMemory(value->ty->data.pointer.base);
+						cout << "  li    t2, " << multisize << endl;
+						cout << "  mul   t1, t1, t2" << endl;
+						cout << "  add   t0, t0, t1" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    t1, " << now << endl;
+							cout << "  add   t1, t1, sp" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
+						}
+						LocInsert((int*)value, now);
+						now += 4;
+					}
+					else {
+						int tmp = LocFind((int*)val.src);
+						if (tmp < 2048) {
+							cout << "  addi  t0, sp, " << tmp << endl;
+						}
+						else {
+							cout << "  li    t0, " << tmp << endl;
+							cout << "  add   t0, t0, sp" << endl;
+						}
+						cout << "  lw    t0, 0(t0)" << endl;
+						if (val.index->kind.tag == KOOPA_RVT_INTEGER) {
+							cout << "  li    t1, " << val.index->kind.data.integer.value << endl;
+						}
+						else if (val.index->kind.tag != KOOPA_RVT_GLOBAL_ALLOC) {
+							int idx = LocFind((int*)val.index);
+							if (idx < 2048) {
+								cout << "  lw    t1, " << idx << "(sp)" << endl;
+							}
+							else {
+								cout << "  li    t1, " << idx << endl;
+								cout << "  add   t1, t1, sp" << endl;
+								cout << "  lw    t1, 0(t1)" << endl;
+							}
+						}
+						else {
+							cout << "  la    t1, " << val.index->name + 1 << endl;
+							cout << "  lw    t1, 0(t1)" << endl;
+						}
+						int multisize = FindAllocMemory(value->ty->data.pointer.base);
+						cout << "  li    t2, " << multisize << endl;
+						cout << "  mul   t1, t1, t2" << endl;
+						cout << "  add   t0, t0, t1" << endl;
+						if (now < 2048) {
+							cout << "  sw    t0, " << now << "(sp)" << endl;
+						}
+						else {
+							cout << "  li    t1, " << now << endl;
+							cout << "  add   t1, t1, sp" << endl;
+							cout << "  sw    t0, 0(t1)" << endl;
 						}
 						LocInsert((int*)value, now);
 						now += 4;
@@ -886,7 +1041,13 @@ void parse_str(const char* str) {
 				}
 				else if(value->kind.tag == KOOPA_RVT_ALLOC){
 					LocInsert((int*)value, now);
-					now += 4;
+					if (value->ty->tag == KOOPA_RTT_POINTER) { // 给数组预留空间
+						int tt = FindAllocMemory(value->ty->data.pointer.base);
+						now += tt;
+					}
+					else {
+						now += 4;
+					}
 				}
 			}
 			cout << endl;

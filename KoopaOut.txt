@@ -7,67 +7,67 @@ decl @putarray(i32, *i32)
 decl @starttime()
 decl @stoptime()
 
-global %buf_1 = alloc [[i32, 100], 2], zeroinit
-
-fun @merge_sort(@l: i32, @r: i32) {
+fun @func(@b: i32, @c: i32, @d: i32, @e: i32, @f: i32, @g: i32, @h: i32, @i: i32, @j: i32, @a: *[i32, 2]): i32 {
 %entry:
-  %l_1 = alloc i32
-  store @l, %l_1
-  %r_1 = alloc i32
-  store @r, %r_1
-  %0 = load %l_1
-  %1 = add %0, 1
-  %2 = load %r_1
-  %3 = ge %1, %2
-  br %3, %then0, %end0
-
-%then0:
-  ret
-
-%end0:
-  %mid_1 = alloc i32
-  %4 = load %l_1
-  %5 = load %r_1
-  %6 = add %4, %5
-  %7 = div %6, 2
-  store %7, %mid_1
-  %8 = load %l_1
-  %9 = load %mid_1
-  call @merge_sort(%8, %9)
-  %10 = load %mid_1
-  %11 = load %r_1
-  call @merge_sort(%10, %11)
+  %b_1 = alloc i32
+  store @b, %b_1
+  %c_1 = alloc i32
+  store @c, %c_1
+  %d_1 = alloc i32
+  store @d, %d_1
+  %e_1 = alloc i32
+  store @e, %e_1
+  %f_1 = alloc i32
+  store @f, %f_1
+  %g_1 = alloc i32
+  store @g, %g_1
+  %h_1 = alloc i32
+  store @h, %h_1
   %i_1 = alloc i32
-  %12 = load %l_1
-  store %12, %i_1
+  store @i, %i_1
   %j_1 = alloc i32
-  %13 = load %mid_1
-  store %13, %j_1
-  %k_1 = alloc i32
-  %14 = load %l_1
-  store %14, %k_1
-  jump %while_entry0
+  store @j, %j_1
+  %a_1 = alloc *[i32, 2]
+  store @a, %a_1
+  %0 = load %a_1
+  %1 = getptr %0, 1
+  %2 = getelemptr %1, 1
+  %3 = load %2
+  ret %3
+}
 
-%while_entry0:
-  %15 = load %i_1
-  %16 = load %mid_1
-  %17 = lt %15, %16
-  %18 = load %j_1
-  %19 = load %r_1
-  %20 = lt %18, %19
-  %21 = ne 0, %17
-  %22 = ne 0, %20
-  %23 = and %22, %21
-  br %23, %while_body0, %while_end0
+fun @main(): i32 {
+%entry:
+  %a_2 = alloc [[[i32, 2], 2], 2]
+  %4 = getelemptr %a_2, 0
+  %5 = getelemptr %4, 0
+  %6 = getelemptr %5, 0
+  store 1, %6
+  %7 = getelemptr %5, 1
+  store 2, %7
+  %8 = getelemptr %4, 1
+  %9 = getelemptr %8, 0
+  store 3, %9
+  %10 = getelemptr %8, 1
+  store 4, %10
+  %11 = getelemptr %a_2, 1
+  %12 = getelemptr %11, 0
+  %13 = getelemptr %12, 0
+  store 5, %13
+  %14 = getelemptr %12, 1
+  store 6, %14
+  %15 = getelemptr %11, 1
+  %16 = getelemptr %15, 0
+  store 7, %16
+  %17 = getelemptr %15, 1
+  store 8, %17
+  %x_1 = alloc i32
+  %18 = getelemptr %a_2, 1
+  %19 = getelemptr %18, 0
+  %20 = call @func(1, 1, 1, 1, 1, 1, 1, 1, 1, %19)
+  store %20, %x_1
+  %21 = load %x_1
+  ret %21
+}
 
-%while_body0:
-  %24 = getelemptr %buf_1, 0
-  %25 = getelemptr %24, 0
-  %26 = load %25
-  %27 = getelemptr %buf_1, 0
-  %28 = getelemptr %27, 0
-  %29 = load %28
-  %30 = lt %26, %29
-  br %30, %then1, %else1
 
-%then1:

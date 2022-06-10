@@ -26,8 +26,9 @@ static int dim;
 typedef struct {
 	std::string name;
 	int value, status, cnt;
-	// status = 0为变量，=1为常量, =-1为void函数，=-2为int函数 = 2数组
+	// status = 0为变量，=1为常量, =-1为void函数，=-2为int函数 = 2数组, = 3指针
 	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
+	// dimen是数组维数
 	bool init;
 }Symbol;
 
@@ -735,7 +736,16 @@ public:
 	}
 	Calcret Calc() const override {
 		Calcret tmp;
-		tmp.type = -1;
+		tmp.value = 0;
+		if (exist == 0) {
+			std::cout << "i32";
+		}
+		else {
+			tmp.value = 1;
+			std::cout << "[";
+			tmp.value += const_exps->Calc().value;
+			std::cout << ", " << const_exp->Calc().value << "]";
+		}
 		return tmp;
 	}	
 	SymbolList* FindSym() const override {
@@ -895,7 +905,6 @@ public:
 				result = new int[size + 5];
 				nowpos = 0;
 				if (initialized) {
-					Debug();
 					int init_num = init_val->Array(0, 0);
 					for (; init_num < size; init_num++) {
 						result[nowpos++] = 0;
@@ -1044,13 +1053,20 @@ public:
 		return tmp;
 	}
 	Calcret Calc() const override {
-		if (exist) {
-			int pos = exp->Calc().value;
-			std::cout << "  %" << now << " = getelemptr %" << now - 1 << ", " << pos << std::endl;
-			now++;
-			exps->Calc();
-		}
 		Calcret tmp;
+		tmp.value = 0;
+		if (exist) {
+			int prenow = now - 1;
+			Dumpret pos = exp->Dump();
+			if (pos.type == 0) {
+				std::cout << "  %" << now << " = getelemptr %" << now - 1 << ", " << pos.value << std::endl;
+			}
+			else {
+				std::cout << "  %" << now << " = getelemptr %" << prenow << ", %" << now - 1 << std::endl;
+			}
+			now++;
+			tmp.value = exps->Calc().value + 1;
+		}
 		tmp.type = -1;
 		return tmp;
 	}
@@ -1188,20 +1204,37 @@ public:
 
 class FuncFParamAST : public BaseAST {
 public:
+	bool is_array = 0;
 	std::string ident;
 	std::unique_ptr<BaseAST> type;
+	std::unique_ptr<BaseAST> const_exps;
 	Dumpret Dump() const override {
-		Symbol sym = InsertSymbol(ident, 0, 0, 1);
-		if (sym.status != -1) {
+		if (is_array == 0) {
+			Symbol sym = InsertSymbol(ident, 0, 0, 1);
 			std::cout << "  %" << ident << "_" << sym.cnt << " = alloc i32" << std::endl;
+			std::cout << "  store @" << ident << ", " << "%" << ident << "_" << sym.cnt << std::endl;
 		}
-		std::cout << "  store @" << ident << ", " << "%" << ident << "_" << sym.cnt << std::endl;
+		else {
+			Symbol sym = InsertSymbol(ident, 0, 3, 1);
+			std::cout << "  %" << ident << "_" << sym.cnt << " = alloc *";
+			int nowdim = const_exps->Calc().value;
+			SymbolList* tmp = FindSymbolValue(ident);
+			tmp->sym.value = nowdim + 1; // 修改维度
+			std::cout << std::endl;
+			std::cout << "  store @" << ident << ", " << "%" << ident << "_" << sym.cnt << std::endl;
+		}
 		Dumpret tmp;
 		tmp.type = 1;
 		return tmp;
 	}
 	Calcret Calc() const override {
-		std::cout << "@" << ident << ": i32";
+		if (is_array == 0) {
+			std::cout << "@" << ident << ": i32";
+		}
+		else {
+			std::cout << "@" << ident << ": *";
+			const_exps->Calc();
+		}
 		Calcret tmp;
 		tmp.type = -1;
 		return tmp;
@@ -1337,6 +1370,48 @@ public:
 			p.value = tmp->sym.value;
 			return p;
 		}
+		else if (tmp->sym.status == 3) { // 指针
+			std::cout << "  %" << now << " = load %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+			int prenow = now;
+			now++;
+			Dumpret rtmp;
+			rtmp.value = 1;
+			if (is_array) {
+				Dumpret pos = exp->Dump();
+				if (pos.type == 0) {
+					std::cout << "  %" << now << " = getptr %" << prenow << ", " << pos.value << std::endl;
+				}
+				else {
+					std::cout << "  %" << now << " = getptr %" << prenow << ", %" << now - 1 << std::endl;
+				}
+				now++;
+				int nowdim = exps->Calc().value + 1;
+				if (nowdim == tmp->sym.value) {
+					rtmp.value = 2;
+					std::cout << "  %" << now << " = load %" << now - 1 << std::endl;
+					now++;
+				}
+				else {
+					std::cout << "  %" << now << " = getelemptr %" << now - 1 << ", 0" << std::endl;
+					now++;
+				}
+			}
+			else {
+				std::cout << "  %" << now << " = getptr %" << now - 1 << ", 0" << std::endl;
+				now++;
+				rtmp.value = 2;
+			}
+			rtmp.type = 10;
+			return rtmp;
+		}
+		else if (tmp->sym.status == 2 && is_array == 0) { // is_array并不是表示它是否是数组，而是表示这个LVal的表现形式是不是数组
+			// 传递的是一个数组指针
+			std::cout << "  %" << now << " = getelemptr %" << tmp->sym.name << "_" << tmp->sym.cnt << ", 0" << std::endl;
+			now++;
+			Dumpret tmp;
+			tmp.type = 10;
+			return tmp;
+		}
 		else if (is_array == 0) {
 			std::cout << "  %" << now << " = load %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
 			now++;
@@ -1345,15 +1420,28 @@ public:
 			return tmp;
 		}
 		else {
-			int pos = exp->Calc().value;
-			std::cout << "  %" << now << " = getelemptr %" << tmp->sym.name << "_" << tmp->sym.cnt << ", " << pos << std::endl;
+			Dumpret pos = exp->Dump();
+			if (pos.type == 0) {
+				std::cout << "  %" << now << " = getelemptr %" << tmp->sym.name << "_" << tmp->sym.cnt << ", " << pos.value << std::endl;
+			}
+			else {
+				std::cout << "  %" << now << " = getelemptr %" << tmp->sym.name << "_" << tmp->sym.cnt << ", %" << now - 1 << std::endl;
+			}
 			now++;
-			exps->Calc();
-			std::cout << "  %" << now << " = load %" << now - 1 << std::endl;
-			now++;
-			Dumpret tmp;
-			tmp.type = 1;
-			return tmp;
+			int nowdim = exps->Calc().value + 1;
+			Dumpret rtmp;
+			rtmp.value = 1;
+			if (nowdim == tmp->sym.value) {
+				rtmp.value = 2;
+				std::cout << "  %" << now << " = load %" << now - 1 << std::endl;
+				now++;
+			} 
+			else {
+				std::cout << "  %" << now << " = getelemptr %" << now - 1 << ", 0" << std::endl;
+				now++;
+			}
+			rtmp.type = 9;
+			return rtmp;
 		}
 	}
 	Calcret Calc() const override {
@@ -1422,16 +1510,29 @@ public:
 		}
 		else if (type == 0) { // LVal = Exp
 			SymbolList* tmp = l_val->FindSym();
-			assert(tmp->sym.status == 0); // 向常量赋值则错误
-			Dumpret dret = exp->Dump();
-			if (dret.type != 0) {
-				std::cout << "  store %" << now - 1 << ", %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+			assert(tmp->sym.status != 1); // 向常量赋值则错误
+			if (tmp->sym.status == 2 || tmp->sym.status == 3) { // 数组、指针
+				l_val->Dump();
+				int prenow = now - 2;
+				Dumpret dret = exp->Dump();
+				if (dret.type != 0) {
+					std::cout << "  store %" << now - 1 << ", %" << prenow << std::endl;
+				}
+				else {
+					std::cout << "  store " << dret.value << ", %" << prenow << std::endl;
+				}
 			}
 			else {
-				std::cout << "  store " << dret.value << ", %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+				Dumpret dret = exp->Dump();
+				if (dret.type != 0) {
+					std::cout << "  store %" << now - 1 << ", %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+				}
+				else {
+					std::cout << "  store " << dret.value << ", %" << tmp->sym.name << "_" << tmp->sym.cnt << std::endl;
+				}
+				tmp->sym.value = exp->Calc().value;
+				tmp->sym.init = 1;
 			}
-			tmp->sym.value = exp->Calc().value;
-			tmp->sym.init = 1;
 		}
 		else if (type == 2) { // Exp;
 			if (exist) return exp->Dump();
@@ -1512,8 +1613,12 @@ public:
 	
 	Calcret Calc() const override {
 		if (type == 1) {
-			Calcret tmp = exp->Calc();
-			if(tmp.type == 0) tmp.type = 2; // 返回值为常量的函数
+			Calcret tmp;
+			tmp.type = -1;
+			if (exist) {
+				tmp = exp->Calc();
+				if (tmp.type == 0) tmp.type = 2;// 返回值为常量的函数
+			}
 			return tmp;
 		}
 		Calcret tmp;
