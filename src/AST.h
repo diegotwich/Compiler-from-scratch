@@ -1110,7 +1110,6 @@ public:
 		this->Calc();
 		DeleteBlock();
 		if (blkret.type != 2) {
-			assert(funcret.type == -3);
 			std::cout << "  ret" << std::endl;
 		}
 		std::cout << "}" << std::endl << std::endl;
