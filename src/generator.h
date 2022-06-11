@@ -87,6 +87,9 @@ int FindAllocMemory(koopa_raw_type_t now) {
 	else if (now->tag == KOOPA_RTT_INT32) {
 		return 4;
 	}
+	else if (now->tag == KOOPA_RTT_POINTER) {
+		return 4;
+	}
 	return 0;
 }
 
@@ -201,7 +204,7 @@ void parse_str(const char* str) {
 		}
 		LocInsert((int*)func, offset);
 		if (func->params.len > 8) {
-			for (size_t k = func->params.len - 1; k >= 8; k--) { // 参数存到栈帧里
+			for (size_t k = 8; k <= func->params.len - 1; k++) { // 参数存到栈帧里
 				LocInsert((int*)func->params.buffer[k], now);
 				now += 4;
 			}

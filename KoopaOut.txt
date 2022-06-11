@@ -7,67 +7,321 @@ decl @putarray(i32, *i32)
 decl @starttime()
 decl @stoptime()
 
-fun @func(@b: i32, @c: i32, @d: i32, @e: i32, @f: i32, @g: i32, @h: i32, @i: i32, @j: i32, @a: *[i32, 2]): i32 {
+fun @mm(@n: i32, @A: *[i32, 1024], @B: *[i32, 1024], @C: *[i32, 1024]) {
 %entry:
-  %b_1 = alloc i32
-  store @b, %b_1
-  %c_1 = alloc i32
-  store @c, %c_1
-  %d_1 = alloc i32
-  store @d, %d_1
-  %e_1 = alloc i32
-  store @e, %e_1
-  %f_1 = alloc i32
-  store @f, %f_1
-  %g_1 = alloc i32
-  store @g, %g_1
-  %h_1 = alloc i32
-  store @h, %h_1
+  %n_1 = alloc i32
+  store @n, %n_1
+  %A_1 = alloc *[i32, 1024]
+  store @A, %A_1
+  %B_1 = alloc *[i32, 1024]
+  store @B, %B_1
+  %C_1 = alloc *[i32, 1024]
+  store @C, %C_1
   %i_1 = alloc i32
-  store @i, %i_1
   %j_1 = alloc i32
-  store @j, %j_1
-  %a_1 = alloc *[i32, 2]
-  store @a, %a_1
-  %0 = load %a_1
-  %1 = getptr %0, 1
-  %2 = getelemptr %1, 1
-  %3 = load %2
-  ret %3
+  %k_1 = alloc i32
+  store 0, %i_1
+  store 0, %j_1
+  jump %while_entry0
+
+%while_entry0:
+  %0 = load %i_1
+  %1 = load %n_1
+  %2 = lt %0, %1
+  br %2, %while_body0, %while_end0
+
+%while_body0:
+  store 0, %j_1
+  jump %while_entry1
+
+%while_entry1:
+  %3 = load %j_1
+  %4 = load %n_1
+  %5 = lt %3, %4
+  br %5, %while_body1, %while_end1
+
+%while_body1:
+  %6 = load %C_1
+  %7 = load %i_1
+  %8 = getptr %6, %7
+  %9 = load %j_1
+  %10 = getelemptr %8, %9
+  %11 = load %10
+  store 0, %10
+  %12 = load %j_1
+  %13 = add %12, 1
+  store %13, %j_1
+  jump %while_entry1
+
+%while_end1:
+  %14 = load %i_1
+  %15 = add %14, 1
+  store %15, %i_1
+  jump %while_entry0
+
+%while_end0:
+  store 0, %i_1
+  store 0, %j_1
+  store 0, %k_1
+  jump %while_entry2
+
+%while_entry2:
+  %16 = load %k_1
+  %17 = load %n_1
+  %18 = lt %16, %17
+  br %18, %while_body2, %while_end2
+
+%while_body2:
+  store 0, %i_1
+  jump %while_entry3
+
+%while_entry3:
+  %19 = load %i_1
+  %20 = load %n_1
+  %21 = lt %19, %20
+  br %21, %while_body3, %while_end3
+
+%while_body3:
+  %22 = load %A_1
+  %23 = load %i_1
+  %24 = getptr %22, %23
+  %25 = load %k_1
+  %26 = getelemptr %24, %25
+  %27 = load %26
+  %28 = eq %27, 0
+  br %28, %then0, %end0
+
+%then0:
+  %29 = load %i_1
+  %30 = add %29, 1
+  store %30, %i_1
+  jump %while_entry3
+
+%end0:
+  store 0, %j_1
+  jump %while_entry4
+
+%while_entry4:
+  %31 = load %j_1
+  %32 = load %n_1
+  %33 = lt %31, %32
+  br %33, %while_body4, %while_end4
+
+%while_body4:
+  %34 = load %C_1
+  %35 = load %i_1
+  %36 = getptr %34, %35
+  %37 = load %j_1
+  %38 = getelemptr %36, %37
+  %39 = load %38
+  %40 = load %C_1
+  %41 = load %i_1
+  %42 = getptr %40, %41
+  %43 = load %j_1
+  %44 = getelemptr %42, %43
+  %45 = load %44
+  %46 = load %A_1
+  %47 = load %i_1
+  %48 = getptr %46, %47
+  %49 = load %k_1
+  %50 = getelemptr %48, %49
+  %51 = load %50
+  %52 = load %B_1
+  %53 = load %k_1
+  %54 = getptr %52, %53
+  %55 = load %j_1
+  %56 = getelemptr %54, %55
+  %57 = load %56
+  %58 = mul %51, %57
+  %59 = add %45, %58
+  store %59, %38
+  %60 = load %j_1
+  %61 = add %60, 1
+  store %61, %j_1
+  jump %while_entry4
+
+%while_end4:
+  %62 = load %i_1
+  %63 = add %62, 1
+  store %63, %i_1
+  jump %while_entry3
+
+%while_end3:
+  %64 = load %k_1
+  %65 = add %64, 1
+  store %65, %k_1
+  jump %while_entry2
+
+%while_end2:
+  ret
 }
+
+global %A_2 = alloc [[i32, 1024], 1024], zeroinit
+
+global %B_2 = alloc [[i32, 1024], 1024], zeroinit
+
+global %C_2 = alloc [[i32, 1024], 1024], zeroinit
 
 fun @main(): i32 {
 %entry:
-  %a_2 = alloc [[[i32, 2], 2], 2]
-  %4 = getelemptr %a_2, 0
-  %5 = getelemptr %4, 0
-  %6 = getelemptr %5, 0
-  store 1, %6
-  %7 = getelemptr %5, 1
-  store 2, %7
-  %8 = getelemptr %4, 1
-  %9 = getelemptr %8, 0
-  store 3, %9
-  %10 = getelemptr %8, 1
-  store 4, %10
-  %11 = getelemptr %a_2, 1
-  %12 = getelemptr %11, 0
-  %13 = getelemptr %12, 0
-  store 5, %13
-  %14 = getelemptr %12, 1
-  store 6, %14
-  %15 = getelemptr %11, 1
-  %16 = getelemptr %15, 0
-  store 7, %16
-  %17 = getelemptr %15, 1
-  store 8, %17
-  %x_1 = alloc i32
-  %18 = getelemptr %a_2, 1
-  %19 = getelemptr %18, 0
-  %20 = call @func(1, 1, 1, 1, 1, 1, 1, 1, 1, %19)
-  store %20, %x_1
-  %21 = load %x_1
-  ret %21
+  %n_2 = alloc i32
+  %66 = call @getint()
+  store %66, %n_2
+  %i_2 = alloc i32
+  %j_2 = alloc i32
+  store 0, %i_2
+  store 0, %j_2
+  jump %while_entry5
+
+%while_entry5:
+  %67 = load %i_2
+  %68 = load %n_2
+  %69 = lt %67, %68
+  br %69, %while_body5, %while_end5
+
+%while_body5:
+  store 0, %j_2
+  jump %while_entry6
+
+%while_entry6:
+  %70 = load %j_2
+  %71 = load %n_2
+  %72 = lt %70, %71
+  br %72, %while_body6, %while_end6
+
+%while_body6:
+  %73 = load %i_2
+  %74 = getelemptr %A_2, %73
+  %75 = load %j_2
+  %76 = getelemptr %74, %75
+  %77 = load %76
+  %78 = call @getint()
+  store %78, %76
+  %79 = load %j_2
+  %80 = add %79, 1
+  store %80, %j_2
+  jump %while_entry6
+
+%while_end6:
+  %81 = load %i_2
+  %82 = add %81, 1
+  store %82, %i_2
+  jump %while_entry5
+
+%while_end5:
+  store 0, %i_2
+  store 0, %j_2
+  jump %while_entry7
+
+%while_entry7:
+  %83 = load %i_2
+  %84 = load %n_2
+  %85 = lt %83, %84
+  br %85, %while_body7, %while_end7
+
+%while_body7:
+  store 0, %j_2
+  jump %while_entry8
+
+%while_entry8:
+  %86 = load %j_2
+  %87 = load %n_2
+  %88 = lt %86, %87
+  br %88, %while_body8, %while_end8
+
+%while_body8:
+  %89 = load %i_2
+  %90 = getelemptr %B_2, %89
+  %91 = load %j_2
+  %92 = getelemptr %90, %91
+  %93 = load %92
+  %94 = call @getint()
+  store %94, %92
+  %95 = load %j_2
+  %96 = add %95, 1
+  store %96, %j_2
+  jump %while_entry8
+
+%while_end8:
+  %97 = load %i_2
+  %98 = add %97, 1
+  store %98, %i_2
+  jump %while_entry7
+
+%while_end7:
+  call @starttime()
+  store 0, %i_2
+  jump %while_entry9
+
+%while_entry9:
+  %99 = load %i_2
+  %100 = lt %99, 5
+  br %100, %while_body9, %while_end9
+
+%while_body9:
+  %101 = load %n_2
+  %102 = getelemptr %A_2, 0
+  %103 = getelemptr %B_2, 0
+  %104 = getelemptr %C_2, 0
+  call @mm(%101, %102, %103, %104)
+  %105 = load %n_2
+  %106 = getelemptr %A_2, 0
+  %107 = getelemptr %C_2, 0
+  %108 = getelemptr %B_2, 0
+  call @mm(%105, %106, %107, %108)
+  %109 = load %i_2
+  %110 = add %109, 1
+  store %110, %i_2
+  jump %while_entry9
+
+%while_end9:
+  %ans_1 = alloc i32
+  store 0, %ans_1
+  store 0, %i_2
+  jump %while_entry10
+
+%while_entry10:
+  %111 = load %i_2
+  %112 = load %n_2
+  %113 = lt %111, %112
+  br %113, %while_body10, %while_end10
+
+%while_body10:
+  store 0, %j_2
+  jump %while_entry11
+
+%while_entry11:
+  %114 = load %j_2
+  %115 = load %n_2
+  %116 = lt %114, %115
+  br %116, %while_body11, %while_end11
+
+%while_body11:
+  %117 = load %ans_1
+  %118 = load %i_2
+  %119 = getelemptr %B_2, %118
+  %120 = load %j_2
+  %121 = getelemptr %119, %120
+  %122 = load %121
+  %123 = add %117, %122
+  store %123, %ans_1
+  %124 = load %j_2
+  %125 = add %124, 1
+  store %125, %j_2
+  jump %while_entry11
+
+%while_end11:
+  %126 = load %i_2
+  %127 = add %126, 1
+  store %127, %i_2
+  jump %while_entry10
+
+%while_end10:
+  call @stoptime()
+  %128 = load %ans_1
+  call @putint(%128)
+  call @putch(10)
+  ret 0
 }
 
 
