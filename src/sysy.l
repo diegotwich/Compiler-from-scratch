@@ -15,8 +15,8 @@ using namespace std;
 
 /* ¿Õ°×·ûºÍ×¢ÊÍ */
 WhiteSpace		[ \t\n\r]*
-LineComment		"//".*$
-BlockComment    \/\*([^\*^\/]*|[\*^\/*]*|[^\**\/]*)*\*\/
+LineComment		"//".*
+BlockComment    \/\*([^\"\*]*|[\*]*\"[^\"]*\"|\*+[^\"\/\*])*[\*]*\*\/
 
 /* ±êÊ¶·û */
 Identifier		[a-zA-Z_][a-zA-Z0-9_]*
