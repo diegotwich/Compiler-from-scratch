@@ -117,7 +117,7 @@ void parse_str(const char* str) {
 	// 解析字符串 str, 得到 Koopa IR 程序
 	koopa_program_t program;
 	koopa_error_code_t ret = koopa_parse_from_string(str, &program);
-	assert(ret == KOOPA_EC_SUCCESS);  // 确保解析时没有出错
+	// assert(ret == KOOPA_EC_SUCCESS);  // 确保解析时没有出错
 	// 创建一个raw program builder,用来构建raw program
 	koopa_raw_program_builder_t builder = koopa_new_raw_program_builder();
 	// 将Koopa IR程序转换为raw program
@@ -161,7 +161,7 @@ void parse_str(const char* str) {
 		int ra_store = -1; // 返回值存储
 		// 正常情况下, 列表中的元素就是函数, 我们只不过是在确认这个事实
 	   // 当然, 你也可以基于 raw slice 的 kind, 实现一个通用的处理函数
-		assert(raw.funcs.kind == KOOPA_RSIK_FUNCTION);
+		// assert(raw.funcs.kind == KOOPA_RSIK_FUNCTION);
 		// 获取当前函数
 		koopa_raw_function_t func = (koopa_raw_function_t)raw.funcs.buffer[i];
 		if (func->bbs.len == 0) continue;
@@ -172,7 +172,7 @@ void parse_str(const char* str) {
 		int offset = 0, maxarg = 0;
 		bool if_call = 0;
 		for (size_t j = 0; j < func->bbs.len; ++j) {
-			assert(func->bbs.kind == KOOPA_RSIK_BASIC_BLOCK);
+			// assert(func->bbs.kind == KOOPA_RSIK_BASIC_BLOCK);
 			koopa_raw_basic_block_t bb = (koopa_raw_basic_block_t)func->bbs.buffer[j];
 			for (size_t k = 0; k < bb->insts.len; ++k) {
 				koopa_raw_value_t value = (koopa_raw_value_t)bb->insts.buffer[k];
@@ -223,7 +223,7 @@ void parse_str(const char* str) {
 		}
 		// 进一步处理当前函数
 		for (size_t j = 0; j < func->bbs.len; ++j) {
-			assert(func->bbs.kind == KOOPA_RSIK_BASIC_BLOCK);
+			// assert(func->bbs.kind == KOOPA_RSIK_BASIC_BLOCK);
 			koopa_raw_basic_block_t bb = (koopa_raw_basic_block_t)func->bbs.buffer[j];
 			if (strcmp(bb->name + 1, "entry") != 0) cout << bb->name + 1 << ":" << endl;
 			// 进一步处理当前基本块
@@ -258,7 +258,7 @@ void parse_str(const char* str) {
 					}
 					else if (val.lhs->kind.tag == KOOPA_RVT_BINARY || val.lhs->kind.tag == KOOPA_RVT_LOAD || val.lhs->kind.tag == KOOPA_RVT_ALLOC || val.lhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.lhs->kind.tag == KOOPA_RVT_CALL || val.lhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.lhs->kind.tag == KOOPA_RVT_GET_PTR) {
 						int loc = LocFind((int*)val.lhs);
-						assert(loc >= 0);
+						// assert(loc >= 0);
 						if (loc < 2048) {
 							cout << "  lw    t0, " << loc << "(sp)" << endl;
 						}
@@ -286,7 +286,7 @@ void parse_str(const char* str) {
 					}
 					else if (val.rhs->kind.tag == KOOPA_RVT_BINARY || val.rhs->kind.tag == KOOPA_RVT_LOAD || val.rhs->kind.tag == KOOPA_RVT_ALLOC || val.rhs->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.rhs->kind.tag == KOOPA_RVT_CALL || val.rhs->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.rhs->kind.tag == KOOPA_RVT_GET_PTR) {
 						int loc = LocFind((int*)val.rhs);
-						assert(loc >= 0);
+						// assert(loc >= 0);
 						if (loc < 2048) {
 							cout << "  lw    t1, " << loc << "(sp)" << endl;
 						}
@@ -567,7 +567,7 @@ void parse_str(const char* str) {
 					}
 					else if (val.value->kind.tag == KOOPA_RVT_BINARY || val.value->kind.tag == KOOPA_RVT_LOAD || val.value->kind.tag == KOOPA_RVT_ALLOC || val.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF || val.value->kind.tag == KOOPA_RVT_CALL || val.value->kind.tag == KOOPA_RVT_GET_ELEM_PTR || val.value->kind.tag == KOOPA_RVT_GET_PTR) {
 						int left = LocFind((int*)val.value);
-						assert(left != -1); // ALLOC还未赋值
+						// assert(left != -1); // ALLOC还未赋值
 						if (left < 2048) {
 							cout << "  lw    t0, " << left << "(sp)" << endl;
 						}

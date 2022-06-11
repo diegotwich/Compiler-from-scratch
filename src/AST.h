@@ -139,19 +139,21 @@ inline void whileInsert(int tag) {
 }
 
 inline void whileDelete(int tag) {
-	assert(whilelist != NULL);
-	whileList* tmp = whilelist;
-	if (tmp->next == NULL) {
-		delete whilelist;
-		whilelist = NULL;
-	}
-	else {
-		while (tmp->next->next != NULL) {
-			tmp = tmp->next;
+	// assert(whilelist != NULL);
+	if (whilelist != NULL) {
+		whileList* tmp = whilelist;
+		if (tmp->next == NULL) {
+			delete whilelist;
+			whilelist = NULL;
 		}
-		assert(tmp->next->tag == tag);
-		delete tmp->next;
-		tmp->next = NULL;
+		else {
+			while (tmp->next->next != NULL) {
+				tmp = tmp->next;
+			}
+			// assert(tmp->next->tag == tag);
+			delete tmp->next;
+			tmp->next = NULL;
+		}
 	}
 	return;
 }
@@ -176,7 +178,7 @@ inline void AddBlock() {
 }
 
 inline void DeleteBlock() {
-	assert(nowBlock != NULL); // 尝试删除空链
+	// assert(nowBlock != NULL); // 尝试删除空链
 	BlockSymList* tmp = nowBlock->father;
 	if(nowBlock->symlist != NULL) delete nowBlock->symlist;
 	delete nowBlock;
@@ -248,15 +250,15 @@ inline SymbolList* FindSymbolValue(std::string s) {
 		blockt = blockt->father;
 	}
 	std::cout << s << std::endl;
-	assert(blockt != NULL);
+	// assert(blockt != NULL);
 	return NULL;
 }
 
 inline Symbol InsertSymbol(std::string s, int value, int status, bool init) {
-	assert(nowBlock != NULL);
+	// assert(nowBlock != NULL);
 	SymbolList* p = nowBlock->symlist;
 	while (p != NULL) {
-		assert(p->sym.name != s); //重定义
+		// assert(p->sym.name != s); //重定义
 		p = p->next;
 	}
 
@@ -665,7 +667,7 @@ public:
 					if (offset % (tmp * arraylen[rim]) != 0) break;
 					tmp *= arraylen[rim];
 				}
-				assert(tmp != 1); // 对不齐
+				// assert(tmp != 1); // 对不齐
 				int pos = const_exp->Array(rim, 0);
 				int vals = const_exps->Array(rim, pos);
 				for (int done = pos + vals; done < tmp; done++) {
@@ -979,7 +981,7 @@ public:
 					if (offset % (tmp * arraylen[rim]) != 0) break;
 					tmp *= arraylen[rim];
 				}
-				assert(tmp != 1); // 对不齐
+				// assert(tmp != 1); // 对不齐
 				int pos = init_val->Array(rim, 0);
 				int vals = init_vals->Array(rim, pos);
 				for (int done = pos + vals; done < tmp; done++) {
@@ -1110,7 +1112,9 @@ public:
 		this->Calc();
 		DeleteBlock();
 		if (blkret.type != 2) {
-			std::cout << "  ret" << std::endl;
+			if (funcret.type == -3) {
+				std::cout << "  ret" << std::endl;
+			}
 		}
 		std::cout << "}" << std::endl << std::endl;
 		Dumpret tmp;
@@ -1509,7 +1513,7 @@ public:
 		}
 		else if (type == 0) { // LVal = Exp
 			SymbolList* tmp = l_val->FindSym();
-			assert(tmp->sym.status != 1); // 向常量赋值则错误
+			// assert(tmp->sym.status != 1); // 向常量赋值则错误
 			if (tmp->sym.status == 2 || tmp->sym.status == 3) { // 数组、指针
 				l_val->Dump();
 				int prenow = now - 2;
