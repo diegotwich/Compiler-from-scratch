@@ -21,7 +21,6 @@ struct InstrLocList {
 };
 
 InstrLocList* List; 
-
 /*
 InstrLoc Reg[15]; // 前8个为a，后7个为t
 inline char* regfind(int* addr) {

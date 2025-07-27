@@ -28,7 +28,6 @@ typedef struct {
 	int value, status, cnt;
 	// status = 0为变量，=1为常量, =-1为void函数，=-2为int函数 = 2数组, = 3指针
 	// cnt表示前面有几个同名变量，最终的变量名由name和cnt拼接而成
-	// dimen是数组维数
 	bool init;
 }Symbol;
 
@@ -2234,7 +2233,7 @@ public:
 		if (andop == "&&") {
 			Dumpret laret = la_exp->Dump();
 			Calcret lhs = la_exp->Calc();
-			if (lhs.value != 0 || lhs.type != 0) { // 如果是常值（与变量无关）或者是单值返回的函数，则可以短路处理
+			if (lhs.value != 0 || lhs.type != 0) {
 				if (laret.type != 0) {
 					int tnow = now - 1;
 					Dumpret eret = e_exp->Dump();
